@@ -2,6 +2,8 @@
 
 TypeScript Google Sheets wrapper with typed rows, cell formatting, and Zod schema validation.
 
+**[Documentation](https://betterspread.shahriyar.dev)**
+
 ## Install
 
 ```bash

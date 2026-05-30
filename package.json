@@ -1,6 +1,6 @@
 {
 	"name": "betterspread",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"description": "TypeScript Google Sheets wrapper with typed rows, cell formatting, and Zod schema validation",
 	"main": "./dist/index.js",
 	"module": "./dist/index.js",
@@ -24,7 +24,8 @@
 		"test": "bun test",
 		"prepublishOnly": "bun test && bun run build",
 		"typecheck": "bunx tsc --noEmit",
-		"format": "bunx biome check --write"
+		"format": "bunx biome check --write",
+		"publish": "bunx npm publish"
 	},
 	"keywords": [
 		"google sheets",
@@ -40,10 +41,10 @@
 		"type": "git",
 		"url": "git+https://github.com/shahriyardx/betterspread-node.git"
 	},
+	"homepage": "https://betterspread.shahriyar.dev",
 	"bugs": {
 		"url": "https://github.com/shahriyardx/betterspread-node/issues"
 	},
-	"homepage": "https://github.com/shahriyardx/betterspread-node#readme",
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.16",
 		"@types/bun": "latest",
