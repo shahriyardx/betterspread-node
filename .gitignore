@@ -30,6 +30,9 @@ credentials.json
 .cache
 *.tsbuildinfo
 
+# vitepress cache
+docs/.vitepress/cache
+
 # IntelliJ based IDEs
 .idea
 
