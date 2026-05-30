@@ -2,7 +2,7 @@ import { ZodError } from "zod"
 import { Cell } from "./cell"
 import type { TabInstance, RowInstance, ValueInputOption } from "./types"
 import { ValidationError } from "./types"
-import { Format } from "./format"
+import type { Format } from "./format"
 import {
   columnLabel,
   columnIndex,
@@ -193,6 +193,7 @@ export class Row extends Array<Cell> implements RowInstance {
   }
 
   async clear(): Promise<void> {
+    if (this.length === 0) return
     const client = this._tab.getClient()
     const endCol = columnLabel(this.length - 1)
     const range = `A${this._rowIndex}:${endCol}${this._rowIndex}`

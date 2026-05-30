@@ -11,6 +11,7 @@ export function columnLabel(index: number): string {
 
 /** Convert column label to 0-based index: "A" → 0, "Z" → 25, "AA" → 26 */
 export function columnIndex(label: string): number {
+  if (label.length === 0) return -1
   return (
     label
       .split("")

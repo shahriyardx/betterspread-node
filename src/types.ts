@@ -30,6 +30,11 @@ export class TabNotFoundError extends Error {
   }
 }
 
+export interface SheetInstance {
+  getClient(): sheets_v4.Sheets
+  getId(): string
+}
+
 export interface TabInstance {
   getClient(): sheets_v4.Sheets
   getSheetId(): string

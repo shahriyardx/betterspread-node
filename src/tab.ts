@@ -2,9 +2,9 @@ import type { sheets_v4 } from "@googleapis/sheets"
 import { ZodError, type z } from "zod"
 import { Cell } from "./cell"
 import { Row } from "./row"
-import type { Sheet } from "./sheet"
 import {
   ValidationError,
+  type SheetInstance,
   type ValueInputOption,
   type ValueRenderOption,
 } from "./types"
@@ -37,8 +37,19 @@ export interface GetCellOpts {
   valueRenderOption?: ValueRenderOption
 }
 
+export interface DelRowOpts {
+  start: number
+  end?: number
+}
+
+export interface DelCellOpts {
+  start: string
+  end?: string
+  shift?: "up" | "left"
+}
+
 export class Tab {
-  private sheet: Sheet
+  private sheet: SheetInstance
   private title: string
   private worksheetId: number
   private _gridProperties: sheets_v4.Schema$GridProperties
@@ -46,7 +57,7 @@ export class Tab {
   private _schema: z.ZodObject | null = null
 
   constructor(
-    sheet: Sheet,
+    sheet: SheetInstance,
     title: string,
     worksheetId: number,
     gridProperties: sheets_v4.Schema$GridProperties = {},
@@ -292,7 +303,9 @@ export class Tab {
     return new Row(cells, this, rows.length)
   }
 
-  async delRow(start: number, end?: number): Promise<void> {
+  async delRow(opts: DelRowOpts): Promise<void> {
+    const { start, end } = opts
+    if (start < 1) throw new Error("Row number must be >= 1")
     const client = this.getClient()
     const endIndex = end ?? start
 
@@ -321,11 +334,8 @@ export class Tab {
     return `Tab(title="${this.title}", rows=${rows}, cols=${cols})`
   }
 
-  async delCell(
-    start: string,
-    end?: string,
-    shift: "up" | "left" = "up",
-  ): Promise<void> {
+  async delCell(opts: DelCellOpts): Promise<void> {
+    const { start, end, shift = "up" } = opts
     const client = this.getClient()
     const parsed = parseCellAddress(start)
     if (!parsed) throw new Error(`Invalid cell address: ${start}`)

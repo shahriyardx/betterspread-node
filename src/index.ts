@@ -2,7 +2,14 @@ export { Connection } from "./connection"
 export type { ConnectionOptions } from "./connection"
 export { Sheet } from "./sheet"
 export { Tab } from "./tab"
-export type { AppendOpts, ValuesOpts, GetRowOpts, GetCellOpts } from "./tab"
+export type {
+  AppendOpts,
+  ValuesOpts,
+  GetRowOpts,
+  GetCellOpts,
+  DelRowOpts,
+  DelCellOpts,
+} from "./tab"
 export { Row } from "./row"
 export type { RowUpdateOpts } from "./row"
 export { Cell } from "./cell"

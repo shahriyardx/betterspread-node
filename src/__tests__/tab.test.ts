@@ -92,7 +92,7 @@ test("Tab values with custom range", async () => {
 
   await tab.values({ range: "Sheet1!A1:B2" })
 
-  expect(mockGetSpreadsheet.mock.calls[0][0].ranges![0]).toBe("Sheet1!A1:B2")
+  expect(mockGetSpreadsheet.mock.calls[0]?.[0].ranges?.[0]).toBe("Sheet1!A1:B2")
 })
 
 test("Tab values with format uses spreadsheets.get and returns format", async () => {
@@ -140,14 +140,16 @@ test("Tab values with format uses spreadsheets.get and returns format", async ()
   expect(rows[1][1].value).toBe("42")
 
   // Format populated
-  expect(rows[0][0].format).toEqual({
-    backgroundColor: { red: 1, green: 0, blue: 0 },
+  expect(rows[0][0].format?.backgroundColor).toEqual({
+    red: 1,
+    green: 0,
+    blue: 0,
   })
   // Cell without format
   expect(rows[0][1].format).toBeNull()
 
   // Uses spreadsheets.get with correct fields
-  const callArgs = mockGetSpreadsheet.mock.calls[0][0]
+  const callArgs = mockGetSpreadsheet.mock.calls[0]?.[0]
   expect(callArgs.fields).toContain("userEnteredFormat")
 })
 
@@ -194,9 +196,12 @@ test("Tab values with FORMULA render option uses spreadsheets.values.get", async
   )
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
-  const rows = await tab.values({ range: "Sheet1!A1:B1", valueRenderOption: "FORMULA" })
+  const rows = await tab.values({
+    range: "Sheet1!A1:B1",
+    valueRenderOption: "FORMULA",
+  })
 
-  expect(mockGet.mock.calls[0][0].valueRenderOption).toBe("FORMULA")
+  expect(mockGet.mock.calls[0]?.[0].valueRenderOption).toBe("FORMULA")
   expect(rows[0][0].value).toBe("=SUM(A1:A10)")
   expect(rows[0][1].value).toBe("plain")
   // No format data in this path
@@ -217,7 +222,7 @@ test("Tab getRow with FORMULA render option passes through", async () => {
 
   const row = await tab.getRow({ serialNo: 1, valueRenderOption: "FORMULA" })
 
-  expect(mockGet.mock.calls[0][0].valueRenderOption).toBe("FORMULA")
+  expect(mockGet.mock.calls[0]?.[0].valueRenderOption).toBe("FORMULA")
   expect(row[0].value).toBe("=SUM(A1:A10)")
 })
 
@@ -227,7 +232,7 @@ test("Tab getRow returns Row with correct index", async () => {
 
   const row = await tab.getRow({ serialNo: 1 })
 
-  expect(mockGetSpreadsheet.mock.calls[0][0].ranges![0]).toContain("A1")
+  expect(mockGetSpreadsheet.mock.calls[0]?.[0].ranges?.[0]).toContain("A1")
   expect(row).toHaveLength(2)
   expect(row[0].value).toBe("a")
 })
@@ -244,7 +249,7 @@ test("Tab getRow with empty result returns empty Row", async () => {
 })
 
 test("Tab getCell returns Cell with correct metadata", async () => {
-  const { sheet, mockGet } = makeMockSheet()
+  const { sheet } = makeMockSheet()
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
   const cell = await tab.getCell({ cellName: "B3" })
@@ -261,7 +266,7 @@ test("Tab getCell passes valueRenderOption to API", async () => {
 
   await tab.getCell({ cellName: "A1", valueRenderOption: "FORMULA" })
 
-  expect(mockGet.mock.calls[0][0].valueRenderOption).toBe("FORMULA")
+  expect(mockGet.mock.calls[0]?.[0].valueRenderOption).toBe("FORMULA")
 })
 
 test("Tab append without getRow returns null", async () => {
@@ -272,7 +277,7 @@ test("Tab append without getRow returns null", async () => {
 
   expect(result).toBeNull()
   expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
-  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  const req = mockBatchUpdate.mock.calls[0]?.[0].requestBody.requests[0]
   expect(req.appendCells.rows[0].values).toEqual([
     { userEnteredValue: { stringValue: "x" } },
     { userEnteredValue: { stringValue: "y" } },
@@ -290,7 +295,7 @@ test("Tab append with Cell objects extracts values and applies format", async ()
 
   await tab.append({ values: [styledCell, "y"] })
 
-  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  const req = mockBatchUpdate.mock.calls[0]?.[0].requestBody.requests[0]
   expect(req.appendCells.rows[0].values).toEqual([
     {
       userEnteredValue: { stringValue: "x" },
@@ -320,17 +325,17 @@ test("Tab append with getRow returns Row", async () => {
 
   expect(result).not.toBeNull()
   expect(result).toHaveLength(2)
-  expect(result![0].value).toBe("x")
-  expect(result![1].value).toBe("y")
+  expect(result?.[0].value).toBe("x")
+  expect(result?.[1].value).toBe("y")
 })
 
 test("Tab delRow calls batchUpdate with correct range", async () => {
   const { sheet, mockBatchUpdate } = makeMockSheet()
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
-  await tab.delRow(3)
+  await tab.delRow({ start: 3 })
 
-  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  const req = mockBatchUpdate.mock.calls[0]?.[0].requestBody.requests[0]
   expect(req.deleteDimension.range.dimension).toBe("ROWS")
   expect(req.deleteDimension.range.startIndex).toBe(2)
   expect(req.deleteDimension.range.endIndex).toBe(3)
@@ -340,9 +345,9 @@ test("Tab delRow with end range", async () => {
   const { sheet, mockBatchUpdate } = makeMockSheet()
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
-  await tab.delRow(3, 5)
+  await tab.delRow({ start: 3, end: 5 })
 
-  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  const req = mockBatchUpdate.mock.calls[0]?.[0].requestBody.requests[0]
   expect(req.deleteDimension.range.startIndex).toBe(2)
   expect(req.deleteDimension.range.endIndex).toBe(5)
 })
@@ -351,9 +356,9 @@ test("Tab delCell calls batchUpdate with deleteRange", async () => {
   const { sheet, mockBatchUpdate } = makeMockSheet()
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
-  await tab.delCell("B2")
+  await tab.delCell({ start: "B2" })
 
-  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  const req = mockBatchUpdate.mock.calls[0]?.[0].requestBody.requests[0]
   expect(req.deleteRange.range.sheetId).toBe(0)
   expect(req.deleteRange.shiftDimension).toBe("ROWS")
 })
@@ -362,9 +367,9 @@ test("Tab delCell with range and shift left", async () => {
   const { sheet, mockBatchUpdate } = makeMockSheet()
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
-  await tab.delCell("A1", "C3", "left")
+  await tab.delCell({ start: "A1", end: "C3", shift: "left" })
 
-  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  const req = mockBatchUpdate.mock.calls[0]?.[0].requestBody.requests[0]
   expect(req.deleteRange.range.startRowIndex).toBe(0)
   expect(req.deleteRange.range.endRowIndex).toBe(3)
   expect(req.deleteRange.range.startColumnIndex).toBe(0)
@@ -376,7 +381,9 @@ test("Tab delCell throws on invalid address", async () => {
   const { sheet } = makeMockSheet()
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
-  expect(tab.delCell("invalid")).rejects.toThrow(/Invalid cell address/)
+  expect(tab.delCell({ start: "invalid" })).rejects.toThrow(
+    /Invalid cell address/,
+  )
 })
 
 test("Tab setSchema stores schema and returns this", () => {
@@ -399,7 +406,7 @@ test("Tab append with object validates and converts to row", async () => {
     values: { Name: "John", Email: "john@test.com", Age: "30" },
   })
 
-  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  const req = mockBatchUpdate.mock.calls[0]?.[0].requestBody.requests[0]
   expect(req.appendCells.rows[0].values).toEqual([
     { userEnteredValue: { stringValue: "John" } },
     { userEnteredValue: { stringValue: "john@test.com" } },
@@ -441,7 +448,7 @@ test("Tab append with Cell[] extracts values", async () => {
 
   await tab.append({ values: [cell1, "y"] })
 
-  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  const req = mockBatchUpdate.mock.calls[0]?.[0].requestBody.requests[0]
   expect(req.appendCells.rows[0].values).toEqual([
     { userEnteredValue: { stringValue: "x" } },
     { userEnteredValue: { stringValue: "y" } },

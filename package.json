@@ -1,60 +1,61 @@
 {
-  "name": "betterspread",
-  "version": "0.1.0",
-  "description": "TypeScript Google Sheets wrapper with typed rows, cell formatting, and Zod schema validation",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
-  "files": [
-    "dist",
-    "LICENSE",
-    "README.md"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "scripts": {
-    "build": "tsup",
-    "test": "bun test",
-    "prepublishOnly": "bun test && bun run build",
-    "typecheck": "bunx tsc --noEmit"
-  },
-  "keywords": [
-    "google sheets",
-    "sheets api",
-    "spreadsheet",
-    "typescript",
-    "zod",
-    "validation"
-  ],
-  "author": "Md Shahriyar Alam",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/shahriyardx/betterspread.git"
-  },
-  "bugs": {
-    "url": "https://github.com/shahriyardx/betterspread/issues"
-  },
-  "homepage": "https://github.com/shahriyardx/betterspread#readme",
-  "devDependencies": {
-    "@biomejs/biome": "^2.4.16",
-    "@types/bun": "latest",
-    "tsup": "^8.5.1"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
-  "type": "module",
-  "dependencies": {
-    "@googleapis/drive": "^20.2.0",
-    "@googleapis/sheets": "^13.0.2",
-    "zod": "^4.4.3"
-  }
+	"name": "betterspread",
+	"version": "0.0.1",
+	"description": "TypeScript Google Sheets wrapper with typed rows, cell formatting, and Zod schema validation",
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"files": [
+		"dist",
+		"LICENSE",
+		"README.md"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "tsup",
+		"test": "bun test",
+		"prepublishOnly": "bun test && bun run build",
+		"typecheck": "bunx tsc --noEmit",
+		"format": "bunx biome check --write"
+	},
+	"keywords": [
+		"google sheets",
+		"sheets api",
+		"spreadsheet",
+		"typescript",
+		"zod",
+		"validation"
+	],
+	"author": "Md Shahriyar Alam",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/shahriyardx/betterspread-node.git"
+	},
+	"bugs": {
+		"url": "https://github.com/shahriyardx/betterspread-node/issues"
+	},
+	"homepage": "https://github.com/shahriyardx/betterspread-node#readme",
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.16",
+		"@types/bun": "latest",
+		"tsup": "^8.5.1"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	},
+	"type": "module",
+	"dependencies": {
+		"@googleapis/drive": "^20.2.0",
+		"@googleapis/sheets": "^13.0.2",
+		"zod": "^4.4.3"
+	}
 }
