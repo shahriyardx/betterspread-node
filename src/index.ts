@@ -12,3 +12,5 @@ export {
   SheetNotFoundError,
   TabNotFoundError,
 } from "./types"
+export { columnLabel, columnIndex, parseCellAddress, hexToColor } from "./utils"
+export type { CellAddress } from "./utils"

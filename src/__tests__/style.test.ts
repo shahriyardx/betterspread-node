@@ -255,6 +255,22 @@ test("Style textFormat foregroundColorStyle takes precedence over textColor", ()
   expect(cf.textFormat?.foregroundColorStyle).toEqual({ themeColor: "TEXT" })
 })
 
+test("Style link shorthand maps to textFormat.link", () => {
+  const s = new Style({ link: { uri: "https://example.com" } })
+  const cf = s.toCellFormat()
+  expect(cf.textFormat?.link).toEqual({ uri: "https://example.com" })
+})
+
+test("Style link merged with textFormat.link", () => {
+  const s = new Style({
+    link: { uri: "https://example.com" },
+    bold: true,
+  })
+  const cf = s.toCellFormat()
+  expect(cf.textFormat?.link).toEqual({ uri: "https://example.com" })
+  expect(cf.textFormat?.bold).toBe(true)
+})
+
 // Text rotation
 test("Style accepts textRotation angle", () => {
   const s = new Style({ textRotation: { angle: 45 } })

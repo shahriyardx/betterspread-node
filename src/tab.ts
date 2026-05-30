@@ -2,16 +2,7 @@ import type { sheets_v4 } from "@googleapis/sheets"
 import { Cell } from "./cell"
 import { Row } from "./row"
 import type { Sheet } from "./sheet"
-
-function columnLabel(index: number): string {
-  let label = ""
-  let n = index
-  while (n >= 0) {
-    label = String.fromCharCode(65 + (n % 26)) + label
-    n = Math.floor(n / 26) - 1
-  }
-  return label
-}
+import { columnLabel, columnIndex, parseCellAddress } from "./utils"
 
 export class Tab {
   private sheet: Sheet
@@ -120,17 +111,15 @@ export class Tab {
     })
 
     const value = (res.data.values?.[0]?.[0] as string) ?? ""
-    const colMatch = cellName.match(/^([A-Z]+)/)
-    const label = colMatch?.[1] ?? "A"
-    const cellIndex =
-      label
-        .split("")
-        .reduce((acc, char) => acc * 26 + (char.charCodeAt(0) - 64), 0) - 1
+    const addr = parseCellAddress(cellName)
+    const label = addr?.label ?? "A"
+    const cellIndex = columnIndex(label)
+    const rowIndex = addr?.row ?? parseInt(cellName.match(/\d+/)?.[0] ?? "1", 10)
 
     return new Cell({
       value,
       label,
-      rowIndex: parseInt(cellName.match(/\d+/)?.[0] ?? "1", 10),
+      rowIndex,
       cellIndex,
       tab: this,
       row: null,
@@ -203,28 +192,19 @@ export class Tab {
     shift: "up" | "left" = "up",
   ): Promise<void> {
     const client = this.getClient()
-    const startColMatch = start.match(/^([A-Z]+)(\d+)$/)
-    if (!startColMatch) throw new Error(`Invalid cell address: ${start}`)
-    const startCol = startColMatch[1] ?? ""
-    const startRow = parseInt(startColMatch[2] ?? "0", 10)
-    const startColIndex =
-      startCol
-        .split("")
-        .reduce((acc, char) => acc * 26 + (char.charCodeAt(0) - 64), 0) - 1
+    const parsed = parseCellAddress(start)
+    if (!parsed) throw new Error(`Invalid cell address: ${start}`)
+    const startColIndex = columnIndex(parsed.label)
+    const startRow = parsed.row
 
     let endColIndex = startColIndex
     let endRowIndex = startRow
 
     if (end) {
-      const endColMatch = end.match(/^([A-Z]+)(\d+)$/)
-      if (endColMatch) {
-        const endColStr = endColMatch[1] ?? ""
-        const endRowStr = endColMatch[2] ?? "0"
-        endColIndex =
-          endColStr
-            .split("")
-            .reduce((acc, char) => acc * 26 + (char.charCodeAt(0) - 64), 0) - 1
-        endRowIndex = parseInt(endRowStr, 10)
+      const endParsed = parseCellAddress(end)
+      if (endParsed) {
+        endColIndex = columnIndex(endParsed.label)
+        endRowIndex = endParsed.row
       }
     }
 

@@ -2,18 +2,9 @@ import type { sheets_v4 } from "@googleapis/sheets"
 import { Cell } from "./cell"
 import type { TabInstance, RowInstance } from "./types"
 import { Style } from "./style"
+import { columnLabel } from "./utils"
 
 type CellFormat = sheets_v4.Schema$CellFormat
-
-function columnLabel(index: number): string {
-  let label = ""
-  let n = index
-  while (n >= 0) {
-    label = String.fromCharCode(65 + (n % 26)) + label
-    n = Math.floor(n / 26) - 1
-  }
-  return label
-}
 
 export class Row extends Array<Cell> implements RowInstance {
   private _tab: TabInstance

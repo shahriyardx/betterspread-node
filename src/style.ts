@@ -1,4 +1,5 @@
 import type { sheets_v4 } from "@googleapis/sheets"
+import { hexToColor } from "./utils"
 
 type CellFormat = sheets_v4.Schema$CellFormat
 type Color = sheets_v4.Schema$Color
@@ -14,7 +15,17 @@ type Link = sheets_v4.Schema$Link
 export interface BorderOptions {
   color?: Color
   colorStyle?: ColorStyle
-  style?: "solid" | "dashed" | "dotted" | "double" | "none" | "medium" | "mediumDashed" | "mediumDotted" | "mediumSolid" | "thick"
+  style?:
+    | "solid"
+    | "dashed"
+    | "dotted"
+    | "double"
+    | "none"
+    | "medium"
+    | "mediumDashed"
+    | "mediumDotted"
+    | "mediumSolid"
+    | "thick"
   width?: number
 }
 
@@ -35,6 +46,8 @@ export interface StyleOptions {
   fontFamily?: string
   /** Shorthand for textFormat.fontSize. */
   fontSize?: number
+  /** Shorthand for textFormat.link. */
+  link?: Link
   /** Horizontal alignment. Mapped to CellFormat values. */
   horizontalAlign?: "left" | "center" | "right"
   /** Vertical alignment. Mapped to CellFormat values. */
@@ -101,22 +114,6 @@ const BORDER_STYLE_MAP: Record<string, string> = {
   thick: "THICK",
 }
 
-function hexToColor(hex: string): Color | null {
-  const m = hex
-    .replace("#", "")
-    .match(/^([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/)
-  if (!m) return null
-  const r = m[1]
-  const g = m[2]
-  const b = m[3]
-  if (r === undefined || g === undefined || b === undefined) return null
-  return {
-    red: parseInt(r, 16) / 255,
-    green: parseInt(g, 16) / 255,
-    blue: parseInt(b, 16) / 255,
-  }
-}
-
 function toCellFormatBorder(border?: BorderOptions): Border | undefined {
   if (!border) return undefined
   const b: Border = {}
@@ -136,6 +133,7 @@ export class Style {
   readonly underline?: boolean
   readonly fontFamily?: string
   readonly fontSize?: number
+  readonly link?: Link
   readonly horizontalAlign?: "left" | "center" | "right"
   readonly verticalAlign?: "top" | "middle" | "bottom"
 
@@ -168,6 +166,7 @@ export class Style {
     this.underline = opts.underline
     this.fontFamily = opts.fontFamily
     this.fontSize = opts.fontSize
+    this.link = opts.link
     this.horizontalAlign = opts.horizontalAlign
     this.verticalAlign = opts.verticalAlign
     this.backgroundColor = opts.backgroundColor
@@ -205,9 +204,12 @@ export class Style {
     if (this.borders) {
       const borders: Borders = {}
       if (this.borders.top) borders.top = toCellFormatBorder(this.borders.top)
-      if (this.borders.bottom) borders.bottom = toCellFormatBorder(this.borders.bottom)
-      if (this.borders.left) borders.left = toCellFormatBorder(this.borders.left)
-      if (this.borders.right) borders.right = toCellFormatBorder(this.borders.right)
+      if (this.borders.bottom)
+        borders.bottom = toCellFormatBorder(this.borders.bottom)
+      if (this.borders.left)
+        borders.left = toCellFormatBorder(this.borders.left)
+      if (this.borders.right)
+        borders.right = toCellFormatBorder(this.borders.right)
       if (Object.keys(borders).length > 0) format.borders = borders
     }
 
@@ -254,6 +256,7 @@ export class Style {
     if (this.strikethrough !== undefined) tf.strikethrough = this.strikethrough
     if (this.fontFamily !== undefined) tf.fontFamily = this.fontFamily
     if (this.fontSize !== undefined) tf.fontSize = this.fontSize
+    if (this.link !== undefined) tf.link = this.link
 
     // textColor shorthand → foregroundColor (only if foregroundColor not already set)
     if (this.textColor && !tf.foregroundColor && !tf.foregroundColorStyle) {
