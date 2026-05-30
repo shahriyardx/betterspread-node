@@ -8,10 +8,7 @@ export default defineConfig({
   splitting: false,
   platform: "node",
   target: "esnext",
-  external: [
-    /@googleapis\//,
-    "zod",
-  ],
+  external: [/@googleapis\//, "zod"],
   esbuildOptions(options) {
     options.packages = "external"
   },
