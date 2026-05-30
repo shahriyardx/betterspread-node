@@ -1,0 +1,16 @@
+{
+  "name": "betterspread",
+  "module": "./src/index.ts",
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "type": "module",
+  "dependencies": {
+    "@googleapis/drive": "^20.2.0",
+    "@googleapis/sheets": "^13.0.2"
+  }
+}

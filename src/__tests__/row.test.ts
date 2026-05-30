@@ -1,0 +1,152 @@
+import { test, expect, mock } from "bun:test"
+import { Row } from "../row"
+import { Cell } from "../cell"
+import type { sheets_v4 } from "@googleapis/sheets"
+
+function makeMockTab() {
+  const mockUpdate = mock(() => Promise.resolve({ data: {} }))
+  const mockClear = mock(() => Promise.resolve({ data: {} }))
+  const mockBatchUpdate = mock(() => Promise.resolve({ data: {} }))
+  const mockGet = mock(() =>
+    Promise.resolve({ data: { values: [["x", "y"]] } }),
+  )
+
+  const mockClient = {
+    spreadsheets: {
+      values: {
+        update: mockUpdate,
+        clear: mockClear,
+        get: mockGet,
+      },
+      batchUpdate: mockBatchUpdate,
+    },
+  } as any as sheets_v4.Sheets
+
+  const tab = {
+    getClient: () => mockClient,
+    getSheetId: () => "test-sheet-id",
+    getTitle: () => "Sheet1",
+    getWorksheetId: () => 0,
+  }
+
+  return { tab, mockClient, mockUpdate, mockClear, mockBatchUpdate, mockGet }
+}
+
+function makeCells(tab: any, values: string[], rowIndex: number): Cell[] {
+  return values.map((v, i) => {
+    const label = String.fromCharCode(65 + i)
+    return new Cell({
+      value: v,
+      label,
+      rowIndex,
+      cellIndex: i,
+      tab,
+      row: null,
+    })
+  })
+}
+
+test("Row extends Array and contains Cells", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b", "c"], 1)
+  const row = new Row(cells, tab, 1)
+
+  expect(row).toHaveLength(3)
+  expect(row[0]).toBeInstanceOf(Cell)
+  expect(row[0].value).toBe("a")
+  expect(row[1].value).toBe("b")
+})
+
+test("Row update calls API with correct range", async () => {
+  const { tab, mockUpdate } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b"], 1)
+  const row = new Row(cells, tab, 1)
+
+  await row.update(["x", "y"])
+
+  expect(mockUpdate).toHaveBeenCalledTimes(1)
+  expect(mockUpdate.mock.calls[0][0].range).toContain("A1")
+  expect(mockUpdate.mock.calls[0][0].requestBody.values).toEqual([["x", "y"]])
+})
+
+test("Row update with start column offset", async () => {
+  const { tab, mockUpdate } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b", "c"], 2)
+  const row = new Row(cells, tab, 2)
+
+  await row.update(["z"], "C")
+
+  expect(mockUpdate.mock.calls[0][0].range).toContain("C2")
+})
+
+test("Row clear calls API", async () => {
+  const { tab, mockClear } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b"], 1)
+  const row = new Row(cells, tab, 1)
+
+  await row.clear()
+  expect(mockClear).toHaveBeenCalledTimes(1)
+})
+
+test("Row style calls batchUpdate", async () => {
+  const { tab, mockBatchUpdate } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b"], 2)
+  const row = new Row(cells, tab, 2)
+
+  await row.style({ backgroundColor: { red: 0.5, green: 0.5, blue: 0.5 } })
+
+  expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  expect(req.repeatCell.range.startRowIndex).toBe(1)
+  expect(req.repeatCell.range.endRowIndex).toBe(2)
+})
+
+test("Row appendCell appends single value", async () => {
+  const { tab, mockUpdate } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b"], 1)
+  const row = new Row(cells, tab, 1)
+
+  await row.appendCell("c")
+
+  expect(mockUpdate.mock.calls[0][0].range).toContain("C1")
+  expect(mockUpdate.mock.calls[0][0].requestBody.values).toEqual([["c"]])
+})
+
+test("Row appendCell appends array of values", async () => {
+  const { tab, mockUpdate } = makeMockTab()
+  const cells = makeCells(tab, ["a"], 1)
+  const row = new Row(cells, tab, 1)
+
+  await row.appendCell(["y", "z"])
+
+  expect(mockUpdate.mock.calls[0][0].requestBody.values).toEqual([["y", "z"]])
+})
+
+test("Row refetch replaces cell contents", async () => {
+  const { tab, mockGet } = makeMockTab()
+  const cells = makeCells(tab, ["old1", "old2"], 1)
+  const row = new Row(cells, tab, 1)
+
+  mockGet.mockImplementation(() =>
+    Promise.resolve({ data: { values: [["new1", "new2", "new3"]] } }),
+  )
+
+  await row.refetch()
+
+  expect(row).toHaveLength(3)
+  expect(row[0].value).toBe("new1")
+  expect(row[2].value).toBe("new3")
+})
+
+test("Row delete calls batchUpdate with deleteDimension", async () => {
+  const { tab, mockBatchUpdate } = makeMockTab()
+  const cells = makeCells(tab, ["a"], 3)
+  const row = new Row(cells, tab, 3)
+
+  await row.delete()
+
+  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  expect(req.deleteDimension.range.dimension).toBe("ROWS")
+  expect(req.deleteDimension.range.startIndex).toBe(2)
+  expect(req.deleteDimension.range.endIndex).toBe(3)
+})
