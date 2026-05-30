@@ -126,7 +126,10 @@ const BORDER_STYLE_MAP: Record<string, string> = {
 }
 
 // Reverse map: API uppercase → BorderOptions lowercase
-const BORDER_STYLE_REVERSE_MAP: Record<string, BorderOptions["style"] | undefined> = {
+const BORDER_STYLE_REVERSE_MAP: Record<
+  string,
+  BorderOptions["style"] | undefined
+> = {
   SOLID: "solid",
   DASHED: "dashed",
   DOTTED: "dotted",
@@ -153,7 +156,10 @@ function fromCellFormatBorder(border: Border): BorderOptions | undefined {
   const b: BorderOptions = {}
   if (border.color) b.color = border.color
   if (border.colorStyle) b.colorStyle = border.colorStyle
-  if (border.style) b.style = BORDER_STYLE_REVERSE_MAP[border.style] ?? border.style.toLowerCase() as BorderOptions["style"]
+  if (border.style)
+    b.style =
+      BORDER_STYLE_REVERSE_MAP[border.style] ??
+      (border.style.toLowerCase() as BorderOptions["style"])
   if (border.width != null) b.width = border.width
   return Object.keys(b).length > 0 ? b : undefined
 }
@@ -221,23 +227,36 @@ export class Format {
   static fromCellFormat(format: CellFormat): Format {
     const opts: FormatOptions = {}
     if (format.backgroundColor) opts.backgroundColor = format.backgroundColor
-    if (format.backgroundColorStyle) opts.backgroundColorStyle = format.backgroundColorStyle
+    if (format.backgroundColorStyle)
+      opts.backgroundColorStyle = format.backgroundColorStyle
     if (format.borders) {
       opts.borders = {}
-      if (format.borders.top) opts.borders.top = fromCellFormatBorder(format.borders.top)
-      if (format.borders.bottom) opts.borders.bottom = fromCellFormatBorder(format.borders.bottom)
-      if (format.borders.left) opts.borders.left = fromCellFormatBorder(format.borders.left)
-      if (format.borders.right) opts.borders.right = fromCellFormatBorder(format.borders.right)
+      if (format.borders.top)
+        opts.borders.top = fromCellFormatBorder(format.borders.top)
+      if (format.borders.bottom)
+        opts.borders.bottom = fromCellFormatBorder(format.borders.bottom)
+      if (format.borders.left)
+        opts.borders.left = fromCellFormatBorder(format.borders.left)
+      if (format.borders.right)
+        opts.borders.right = fromCellFormatBorder(format.borders.right)
     }
-    if (format.horizontalAlignment) opts.horizontalAlignment = format.horizontalAlignment as Format["horizontalAlignment"]
-    if (format.verticalAlignment) opts.verticalAlignment = format.verticalAlignment as Format["verticalAlignment"]
-    if (format.hyperlinkDisplayType) opts.hyperlinkDisplayType = format.hyperlinkDisplayType as Format["hyperlinkDisplayType"]
+    if (format.horizontalAlignment)
+      opts.horizontalAlignment =
+        format.horizontalAlignment as Format["horizontalAlignment"]
+    if (format.verticalAlignment)
+      opts.verticalAlignment =
+        format.verticalAlignment as Format["verticalAlignment"]
+    if (format.hyperlinkDisplayType)
+      opts.hyperlinkDisplayType =
+        format.hyperlinkDisplayType as Format["hyperlinkDisplayType"]
     if (format.numberFormat) opts.numberFormat = format.numberFormat
     if (format.padding) opts.padding = format.padding
-    if (format.textDirection) opts.textDirection = format.textDirection as Format["textDirection"]
+    if (format.textDirection)
+      opts.textDirection = format.textDirection as Format["textDirection"]
     if (format.textFormat) opts.textFormat = format.textFormat
     if (format.textRotation) opts.textRotation = format.textRotation
-    if (format.wrapStrategy) opts.wrapStrategy = format.wrapStrategy as Format["wrapStrategy"]
+    if (format.wrapStrategy)
+      opts.wrapStrategy = format.wrapStrategy as Format["wrapStrategy"]
     return new Format(opts)
   }
 

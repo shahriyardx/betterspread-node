@@ -1,10 +1,16 @@
 import type { sheets_v4 } from "@googleapis/sheets"
 import { ZodError } from "zod"
-import type { TabInstance, RowInstance } from "./types"
+import type { TabInstance, RowInstance, ValueInputOption } from "./types"
 import { ValidationError } from "./types"
 import { Format } from "./format"
 
 type CellFormat = sheets_v4.Schema$CellFormat
+
+export interface CellUpdateOpts {
+  value: string
+  format?: Format
+  inputFormat?: ValueInputOption
+}
 
 export interface CellOptions {
   value: string
@@ -72,16 +78,24 @@ export class Cell {
     return `Cell(row=${this.rowIndex}, header="${this.header}", value="${this.value}")`
   }
 
-  async update(newValue: string | Cell, format?: Format): Promise<this> {
+  async update(opts: CellUpdateOpts): Promise<this> {
     const tab = this.requireTab()
     const client = tab.getClient()
 
-    // Resolve value and optional format
-    const isCell = newValue instanceof Cell
-    const strValue = isCell ? newValue.value : newValue
-    const cellFormat = isCell
-      ? (newValue.format?.toCellFormat() ?? undefined)
-      : (format?.toCellFormat() ?? undefined)
+    const strValue = opts.value
+    const cellFormat = opts.format?.toCellFormat()
+
+    // Build cell data with input format support
+    const userEnteredValue =
+      opts.inputFormat === "USER_ENTERED" && strValue.startsWith("=")
+        ? { formulaValue: strValue }
+        : { stringValue: strValue }
+    const cellData: Record<string, unknown> = { userEnteredValue }
+    const fields = ["userEnteredValue"]
+    if (cellFormat) {
+      cellData.userEnteredFormat = cellFormat
+      fields.push("userEnteredFormat")
+    }
 
     // Validate against schema if applicable
     const schema = tab.getSchema()
@@ -101,16 +115,6 @@ export class Cell {
           throw err
         }
       }
-    }
-
-    // Build cell data and push via batchUpdate
-    const cellData: Record<string, unknown> = {
-      userEnteredValue: { stringValue: strValue },
-    }
-    const fields = ["userEnteredValue"]
-    if (cellFormat) {
-      cellData.userEnteredFormat = cellFormat
-      fields.push("userEnteredFormat")
     }
 
     await client.spreadsheets.batchUpdate({

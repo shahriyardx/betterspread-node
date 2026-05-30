@@ -3,8 +3,24 @@ import { ZodError, type z } from "zod"
 import { Cell } from "./cell"
 import { Row } from "./row"
 import type { Sheet } from "./sheet"
-import { ValidationError } from "./types"
-import { columnLabel, columnIndex, parseCellAddress, buildCellData, validateArrayAgainstSchema } from "./utils"
+import {
+  ValidationError,
+  type ValueInputOption,
+  type ValueRenderOption,
+} from "./types"
+import {
+  columnLabel,
+  columnIndex,
+  parseCellAddress,
+  buildCellData,
+  validateArrayAgainstSchema,
+} from "./utils"
+
+export interface AppendOpts {
+  values: Record<string, unknown> | unknown[]
+  inputFormat?: ValueInputOption
+  getRow?: boolean
+}
 
 export class Tab {
   private sheet: Sheet
@@ -62,14 +78,47 @@ export class Tab {
     return this.worksheetId
   }
 
-  async values(range?: string): Promise<Row[]> {
-    const actualRange = range ?? `${this.title}!A1:ZZZ`
+  async values(
+    range?: string,
+    valueRenderOption?: ValueRenderOption,
+  ): Promise<Row[]> {
     const client = this.getClient()
+    const actualRange = range ?? `${this.title}!A1:ZZZ`
+
+    // When render option specified, use spreadsheets.values.get (no format data)
+    if (valueRenderOption) {
+      const res = await client.spreadsheets.values.get({
+        spreadsheetId: this.getSheetId(),
+        range: actualRange,
+        valueRenderOption,
+      })
+      const rows = (res.data.values as unknown[][]) ?? []
+
+      // Cache headers from first row
+      if (rows[0]) {
+        this._setHeaders(rows[0].map((v) => String(v ?? "")))
+      }
+
+      return rows.map((row, i) => {
+        const cells = row.map((val, j) => {
+          return new Cell({
+            value: String(val ?? ""),
+            label: columnLabel(j),
+            rowIndex: i + 1,
+            cellIndex: j,
+            tab: this,
+            row: null,
+          })
+        })
+        return new Row(cells, this, i + 1)
+      })
+    }
+
+    // Default path: spreadsheets.get with effectiveValue + cell format
     const res = await client.spreadsheets.get({
       spreadsheetId: this.getSheetId(),
       ranges: [actualRange],
-      fields:
-        "sheets.data.rowData.values(effectiveValue,userEnteredFormat)",
+      fields: "sheets.data.rowData.values(effectiveValue,userEnteredFormat)",
     })
 
     const rowData = res.data.sheets?.[0]?.data?.[0]?.rowData ?? []
@@ -77,9 +126,11 @@ export class Tab {
     // Cache headers from first row
     const firstRow = rowData[0]
     if (firstRow?.values) {
-      this._setHeaders(firstRow.values.map((v) =>
-        String(extractEffectiveValue(v.effectiveValue) ?? ""),
-      ))
+      this._setHeaders(
+        firstRow.values.map((v) =>
+          String(extractEffectiveValue(v.effectiveValue) ?? ""),
+        ),
+      )
     }
 
     return rowData.map((row, i) => {
@@ -101,51 +152,27 @@ export class Tab {
     })
   }
 
-  async getRow(serialNo: number): Promise<Row> {
-    const client = this.getClient()
-    const range = `${this.title}!A${serialNo}:ZZZ${serialNo}`
-
-    const res = await client.spreadsheets.values.get({
-      spreadsheetId: this.getSheetId(),
-      range,
-    })
-
-    const values = (res.data.values?.[0] as unknown[]) ?? []
-
-    if (values.length === 0) {
-      return new Row([], this, serialNo)
-    }
-
-    const cells = values.map((val, j) => {
-      return new Cell({
-        value: String(val ?? ""),
-        label: columnLabel(j),
-        rowIndex: serialNo,
-        cellIndex: j,
-        tab: this,
-        row: null,
-      })
-    })
-
-    return new Row(cells, this, serialNo)
+  async getRow(
+    serialNo: number,
+    valueRenderOption?: ValueRenderOption,
+  ): Promise<Row> {
+    const rows = await this.values(
+      `${this.title}!A${serialNo}:ZZZ${serialNo}`,
+      valueRenderOption,
+    )
+    return rows[0] ?? new Row([], this, serialNo)
   }
 
   async getCell(
     cellName: string,
-    renderOption: "formatted" | "unformatted" | "formula" = "formatted",
+    valueRenderOption: ValueRenderOption = "FORMATTED_VALUE",
   ): Promise<Cell> {
     const client = this.getClient()
-
-    const valueRenderOptionMap: Record<string, string> = {
-      formatted: "FORMATTED_VALUE",
-      unformatted: "UNFORMATTED_VALUE",
-      formula: "FORMULA",
-    }
 
     const res = await client.spreadsheets.values.get({
       spreadsheetId: this.getSheetId(),
       range: `${this.title}!${cellName}`,
-      valueRenderOption: valueRenderOptionMap[renderOption],
+      valueRenderOption,
     })
 
     const value = (res.data.values?.[0]?.[0] as string) ?? ""
@@ -167,7 +194,9 @@ export class Tab {
 
   private objectToRow(data: Record<string, unknown>): unknown[] {
     if (this._headers.length === 0) {
-      throw new Error("Tab headers not cached. Call values() first or set headers manually.")
+      throw new Error(
+        "Tab headers not cached. Call values() first or set headers manually.",
+      )
     }
     if (this._schema) {
       try {
@@ -190,24 +219,24 @@ export class Tab {
     })
   }
 
-  async append(
-    data: Record<string, unknown> | unknown[],
-    getRow: boolean = false,
-  ): Promise<Row | null> {
+  async append(opts: AppendOpts): Promise<Row | null> {
     const client = this.getClient()
+    const { values: data, inputFormat, getRow } = opts
 
     const rowArray = Array.isArray(data) ? data : this.objectToRow(data)
 
     // Validate array against schema by column position
     if (this._schema) {
       if (this._headers.length === 0) {
-        throw new Error("Tab headers not cached. Call values() first or use object append.")
+        throw new Error(
+          "Tab headers not cached. Call values() first or use object append.",
+        )
       }
       validateArrayAgainstSchema(rowArray, this._headers, this._schema)
     }
 
     // Build CellData for each column — value + optional format in one shot
-    const cellData = rowArray.map(buildCellData)
+    const cellData = rowArray.map((v) => buildCellData(v, inputFormat))
 
     await client.spreadsheets.batchUpdate({
       spreadsheetId: this.getSheetId(),
@@ -216,7 +245,7 @@ export class Tab {
           {
             appendCells: {
               sheetId: this.worksheetId,
-              rows: [{ values: cellData }],
+              rows: [{ values: cellData as Record<string, unknown>[] }],
               fields: "userEnteredValue,userEnteredFormat",
             },
           },

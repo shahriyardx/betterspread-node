@@ -171,7 +171,7 @@ test("Cell update calls API and mutates in place", async () => {
     row: null,
   })
 
-  const updated = await cell.update("new-value")
+  const updated = await cell.update({ value: "new-value" })
 
   expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
   const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
@@ -209,7 +209,9 @@ test("Cell style calls batchUpdate", async () => {
     row: null,
   })
 
-  await cell.style(new Format({ backgroundColor: { red: 1, green: 0, blue: 0 } }))
+  await cell.style(
+    new Format({ backgroundColor: { red: 1, green: 0, blue: 0 } }),
+  )
 
   expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
   const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
@@ -264,7 +266,7 @@ test("Cell update passes through when no schema set", async () => {
     row: null,
   })
 
-  const updated = await cell.update("new-value")
+  const updated = await cell.update({ value: "new-value" })
 
   expect(updated.value).toBe("new-value")
   expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
@@ -286,7 +288,7 @@ test("Cell update validates against schema column type", async () => {
   })
 
   // header is "Score" which maps to z.number() — "abc" fails
-  await expect(cell.update("abc")).rejects.toThrow(ValidationError)
+  await expect(cell.update({ value: "abc" })).rejects.toThrow(ValidationError)
 })
 
 test("Cell update passes validation when schema matches", async () => {
@@ -304,7 +306,7 @@ test("Cell update passes validation when schema matches", async () => {
     row: null,
   })
 
-  const updated = await cell.update("99")
+  const updated = await cell.update({ value: "99" })
 
   expect(updated.value).toBe("99")
   expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
@@ -326,7 +328,10 @@ test("Cell update with Cell object applies value and format via batchUpdate", as
     format: { backgroundColor: { red: 1, green: 0, blue: 0 } },
   })
 
-  const updated = await cell.update(newCell)
+  const updated = await cell.update({
+    value: newCell.value,
+    format: newCell.format ?? undefined,
+  })
 
   expect(updated).toBe(cell)
   expect(cell.value).toBe("new-val")
@@ -360,7 +365,7 @@ test("Cell update with Cell object without format uses value only", async () => 
   })
 
   const newCell = new Cell({ value: "just-value" })
-  await cell.update(newCell)
+  await cell.update({ value: newCell.value })
 
   expect(cell.value).toBe("just-value")
 

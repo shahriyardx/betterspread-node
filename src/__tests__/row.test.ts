@@ -76,7 +76,7 @@ test("Row update calls API with correct range", async () => {
   const cells = makeCells(tab, ["a", "b"], 1)
   const row = new Row(cells, tab, 1)
 
-  await row.update(["x", "y"])
+  await row.update({ values: ["x", "y"] })
 
   expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
   const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
@@ -103,7 +103,9 @@ test("Row style calls batchUpdate", async () => {
   const cells = makeCells(tab, ["a", "b"], 2)
   const row = new Row(cells, tab, 2)
 
-  await row.style(new Format({ backgroundColor: { red: 0.5, green: 0.5, blue: 0.5 } }))
+  await row.style(
+    new Format({ backgroundColor: { red: 0.5, green: 0.5, blue: 0.5 } }),
+  )
 
   expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
   const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
@@ -230,7 +232,7 @@ test("Row update with Cell objects applies format", async () => {
     format: { backgroundColor: { red: 1, green: 0, blue: 0 } },
   })
 
-  await row.update([styledCell, "y"])
+  await row.update({ values: [styledCell, "y"] })
 
   const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
   expect(req.updateCells.rows[0].values).toEqual([
@@ -251,7 +253,7 @@ test("Row update with object maps headers to columns", async () => {
   const cells = makeCells(tabWithHeaders, ["old", "", ""], 1)
   const row = new Row(cells, tabWithHeaders, 1)
 
-  await row.update({ Name: "Alice", Age: "25" })
+  await row.update({ values: { Name: "Alice", Age: "25" } })
 
   const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
   expect(req.updateCells.rows[0].values).toEqual([
@@ -272,7 +274,7 @@ test("Row update with object validates against schema", async () => {
   const row = new Row(cells, tabWithSchema, 1)
 
   await expect(
-    row.update({ Name: "Bob", Score: "bad" }),
+    row.update({ values: { Name: "Bob", Score: "bad" } }),
   ).rejects.toThrow(ValidationError)
 
   expect(mockBatchUpdate).not.toHaveBeenCalled()
@@ -289,7 +291,9 @@ test("Row update array validates against schema by column", async () => {
   const row = new Row(cells, tabWithSchema, 1)
 
   // "abc" fails z.number() for score column (index 1)
-  await expect(row.update(["Bob", "abc"])).rejects.toThrow(ValidationError)
+  await expect(row.update({ values: ["Bob", "abc"] })).rejects.toThrow(
+    ValidationError,
+  )
 
   expect(mockBatchUpdate).not.toHaveBeenCalled()
 })
@@ -304,7 +308,7 @@ test("Row update array passes valid values", async () => {
   const cells = makeCells(tabWithSchema, ["", ""], 1)
   const row = new Row(cells, tabWithSchema, 1)
 
-  await row.update(["Alice", "95"])
+  await row.update({ values: ["Alice", "95"] })
 
   expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
 })

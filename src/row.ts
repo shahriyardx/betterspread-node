@@ -1,9 +1,21 @@
 import { ZodError } from "zod"
 import { Cell } from "./cell"
-import type { TabInstance, RowInstance } from "./types"
+import type { TabInstance, RowInstance, ValueInputOption } from "./types"
 import { ValidationError } from "./types"
 import { Format } from "./format"
-import { columnLabel, columnIndex, buildCellData, extractCellValue, extractCellFormat, validateArrayAgainstSchema } from "./utils"
+import {
+  columnLabel,
+  columnIndex,
+  buildCellData,
+  extractCellValue,
+  extractCellFormat,
+  validateArrayAgainstSchema,
+} from "./utils"
+
+export interface RowUpdateOpts {
+  values: unknown[] | Record<string, unknown>
+  inputFormat?: ValueInputOption
+}
 
 export class Row extends Array<Cell> implements RowInstance {
   private _tab: TabInstance
@@ -102,8 +114,9 @@ export class Row extends Array<Cell> implements RowInstance {
     return pairs
   }
 
-  async update(values: unknown[] | Record<string, unknown>): Promise<void> {
+  async update(opts: RowUpdateOpts): Promise<void> {
     const client = this._tab.getClient()
+    const { values, inputFormat } = opts
 
     // Validate against schema if set
     const schema = this._tab.getSchema()
@@ -131,7 +144,12 @@ export class Row extends Array<Cell> implements RowInstance {
     for (let c = minCol; c <= maxCol; c++) {
       const currentPair = colValPairs[pairIdx]
       if (currentPair && currentPair.colIndex === c) {
-        cellData.push(buildCellData(currentPair.value) as Record<string, unknown>)
+        cellData.push(
+          buildCellData(currentPair.value, inputFormat) as Record<
+            string,
+            unknown
+          >,
+        )
         pairIdx++
       } else {
         cellData.push({ userEnteredValue: { stringValue: "" } })

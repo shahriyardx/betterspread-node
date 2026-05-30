@@ -1,5 +1,10 @@
 import { test, expect } from "bun:test"
-import { columnLabel, columnIndex, parseCellAddress, hexToColor } from "../utils"
+import {
+  columnLabel,
+  columnIndex,
+  parseCellAddress,
+  hexToColor,
+} from "../utils"
 
 test("columnLabel converts 0 to A", () => {
   expect(columnLabel(0)).toBe("A")

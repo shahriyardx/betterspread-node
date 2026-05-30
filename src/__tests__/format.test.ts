@@ -80,7 +80,10 @@ test("Format accepts horizontalAlignment raw value", () => {
 })
 
 test("Format horizontalAlignment overrides horizontalAlign shorthand", () => {
-  const s = new Format({ horizontalAlign: "left", horizontalAlignment: "CENTER" })
+  const s = new Format({
+    horizontalAlign: "left",
+    horizontalAlignment: "CENTER",
+  })
   const cf = s.toCellFormat()
   expect(cf.horizontalAlignment).toBe("CENTER")
 })
@@ -292,7 +295,12 @@ test("Format accepts wrapStrategy", () => {
 })
 
 test("Format accepts all wrap strategies", () => {
-  for (const strat of ["OVERFLOW_CELL", "LEGACY_WRAP", "CLIP", "WRAP"] as const) {
+  for (const strat of [
+    "OVERFLOW_CELL",
+    "LEGACY_WRAP",
+    "CLIP",
+    "WRAP",
+  ] as const) {
     const s = new Format({ wrapStrategy: strat })
     expect(s.toCellFormat().wrapStrategy).toBe(strat)
   }

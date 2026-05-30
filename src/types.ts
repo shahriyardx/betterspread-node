@@ -43,3 +43,9 @@ export interface RowInstance {
   getTab(): TabInstance
   getRowIndex(): number
 }
+
+export type ValueInputOption = "RAW" | "USER_ENTERED"
+export type ValueRenderOption =
+  | "FORMATTED_VALUE"
+  | "UNFORMATTED_VALUE"
+  | "FORMULA"

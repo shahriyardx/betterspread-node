@@ -11,9 +11,11 @@ export function columnLabel(index: number): string {
 
 /** Convert column label to 0-based index: "A" → 0, "Z" → 25, "AA" → 26 */
 export function columnIndex(label: string): number {
-  return label
-    .split("")
-    .reduce((acc, char) => acc * 26 + (char.charCodeAt(0) - 64), 0) - 1
+  return (
+    label
+      .split("")
+      .reduce((acc, char) => acc * 26 + (char.charCodeAt(0) - 64), 0) - 1
+  )
 }
 
 export interface CellAddress {
@@ -31,7 +33,7 @@ export function parseCellAddress(address: string): CellAddress | null {
 import type { sheets_v4 } from "@googleapis/sheets"
 import { ZodError } from "zod"
 import { Cell } from "./cell"
-import { ValidationError } from "./types"
+import { ValidationError, type ValueInputOption } from "./types"
 import type { z } from "zod"
 
 type CellFormat = sheets_v4.Schema$CellFormat
@@ -49,12 +51,21 @@ export function extractCellFormat(v: unknown): CellFormat | undefined {
 /** Build a Google API cell data object from value + optional format. */
 export function buildCellData(
   v: unknown,
-): { userEnteredValue: { stringValue: string }; userEnteredFormat?: CellFormat } {
+  valueInputOption: ValueInputOption = "RAW",
+): {
+  userEnteredValue: { stringValue: string } | { formulaValue: string }
+  userEnteredFormat?: CellFormat
+} {
   const value = extractCellValue(v)
   const format = extractCellFormat(v)
-  const cell: { userEnteredValue: { stringValue: string }; userEnteredFormat?: CellFormat } = {
-    userEnteredValue: { stringValue: value },
-  }
+  const userEnteredValue =
+    valueInputOption === "USER_ENTERED" && value.startsWith("=")
+      ? { formulaValue: value }
+      : { stringValue: value }
+  const cell: {
+    userEnteredValue: { stringValue: string } | { formulaValue: string }
+    userEnteredFormat?: CellFormat
+  } = { userEnteredValue }
   if (format) cell.userEnteredFormat = format
   return cell
 }
