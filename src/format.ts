@@ -260,6 +260,40 @@ export class Format {
     return new Format(opts)
   }
 
+  /**
+   * Create new Format with overrides. Original unchanged.
+   * Merges current properties with opts, opts win on conflict.
+   */
+  extend(opts: FormatOptions): Format {
+    return new Format({
+      bgColor: this.bgColor,
+      textColor: this.textColor,
+      bold: this.bold,
+      italic: this.italic,
+      strikethrough: this.strikethrough,
+      underline: this.underline,
+      fontFamily: this.fontFamily,
+      fontSize: this.fontSize,
+      link: this.link,
+      horizontalAlign: this.horizontalAlign,
+      verticalAlign: this.verticalAlign,
+      backgroundColor: this.backgroundColor,
+      backgroundColorStyle: this.backgroundColorStyle,
+      borders: this.borders,
+      horizontalAlignment: this.horizontalAlignment,
+      verticalAlignment: this.verticalAlignment,
+      hyperlinkDisplayType: this.hyperlinkDisplayType,
+      numberFormat: this.numberFormat,
+      padding: this.padding,
+      textDirection: this.textDirection,
+      textFormat: this.textFormat,
+      textRotation: this.textRotation,
+      wrapStrategy: this.wrapStrategy,
+      raw: this.raw,
+      ...opts,
+    })
+  }
+
   toCellFormat(): CellFormat {
     if (this.raw) return this.raw
 

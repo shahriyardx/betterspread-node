@@ -340,3 +340,33 @@ test("Format handles hex without # prefix", () => {
   const cf = s.toCellFormat()
   expect(cf.backgroundColor).toEqual({ red: 0, green: 0, blue: 0 })
 })
+
+// extend
+test("Format extend returns new Format with merged properties", () => {
+  const base = new Format({ bgColor: "#ff0000", bold: true, fontSize: 14 })
+  const extended = base.extend({ bgColor: "#00ff00", italic: true })
+
+  expect(extended).toBeInstanceOf(Format)
+  expect(extended).not.toBe(base)
+  // Overridden
+  expect(extended.bgColor).toBe("#00ff00")
+  // Preserved from base
+  expect(extended.bold).toBe(true)
+  expect(extended.fontSize).toBe(14)
+  // New
+  expect(extended.italic).toBe(true)
+  // Base unchanged
+  expect(base.bgColor).toBe("#ff0000")
+  expect(base.bold).toBe(true)
+  expect(base.italic).toBeUndefined()
+})
+
+test("Format extend toCellFormat applies merged properties", () => {
+  const base = new Format({ bgColor: "#ff0000", bold: true })
+  const extended = base.extend({ bgColor: "#00ff00", italic: true })
+  const cf = extended.toCellFormat()
+
+  expect(cf.backgroundColor).toEqual({ red: 0, green: 1, blue: 0 })
+  expect(cf.textFormat?.bold).toBe(true)
+  expect(cf.textFormat?.italic).toBe(true)
+})
