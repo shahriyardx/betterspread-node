@@ -9,6 +9,7 @@ export class Tab {
   private title: string
   private worksheetId: number
   private _gridProperties: sheets_v4.Schema$GridProperties
+  private _headers: string[] = []
 
   constructor(
     sheet: Sheet,
@@ -20,6 +21,14 @@ export class Tab {
     this.title = title
     this.worksheetId = worksheetId
     this._gridProperties = gridProperties
+  }
+
+  getHeaders(): string[] {
+    return this._headers
+  }
+
+  _setHeaders(headers: string[]): void {
+    this._headers = headers
   }
 
   getClient(): sheets_v4.Sheets {
@@ -48,6 +57,13 @@ export class Tab {
     })
 
     const rows = (res.data.values as unknown[][]) ?? []
+
+    // Cache headers from first row
+    const firstRow = rows[0]
+    if (firstRow) {
+      this._headers = firstRow.map((h) => String(h ?? ""))
+    }
+
     return rows.map((rowValues, i) => {
       const cells = rowValues.map((val, j) => {
         return new Cell({
@@ -184,6 +200,12 @@ export class Tab {
         ],
       },
     })
+  }
+
+  [Symbol.for("nodejs.util.inspect.custom")](): string {
+    const rows = this._gridProperties.rowCount ?? "?"
+    const cols = this._gridProperties.columnCount ?? "?"
+    return `Tab(title="${this.title}", rows=${rows}, cols=${cols})`
   }
 
   async delCell(

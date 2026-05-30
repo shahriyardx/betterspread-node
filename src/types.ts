@@ -35,6 +35,7 @@ export interface TabInstance {
   getSheetId(): string
   getTitle(): string
   getWorksheetId(): number
+  getHeaders(): string[]
 }
 
 export interface RowInstance {

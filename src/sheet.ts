@@ -146,4 +146,11 @@ export class Sheet {
     })
     return res.data.sheets ?? []
   }
+
+  [Symbol.for("nodejs.util.inspect.custom")](): string {
+    if (this._id) {
+      return `Sheet(name="${this.sheetName}", id="${this._id}")`
+    }
+    return `Sheet(name="${this.sheetName}")`
+  }
 }

@@ -2,7 +2,7 @@ import type { sheets_v4 } from "@googleapis/sheets"
 import { Cell } from "./cell"
 import type { TabInstance, RowInstance } from "./types"
 import { Style } from "./style"
-import { columnLabel } from "./utils"
+import { columnLabel, columnIndex } from "./utils"
 
 type CellFormat = sheets_v4.Schema$CellFormat
 
@@ -14,9 +14,37 @@ export class Row extends Array<Cell> implements RowInstance {
     super(...cells)
     this._tab = tab
     this._rowIndex = rowIndex
+
+    const proxy = new Proxy(this, {
+      get(target, prop) {
+        if (typeof prop === "string" && /^\d+$/.test(prop)) {
+          const idx = parseInt(prop, 10)
+          if (idx >= 0 && idx < target.length) {
+            return target[idx]
+          }
+          return new Cell({
+            value: "",
+            label: columnLabel(idx),
+            rowIndex: target._rowIndex,
+            cellIndex: idx,
+            tab: target._tab,
+            row: proxy,
+          })
+        }
+        return Reflect.get(target, prop)
+      },
+    })
+
     for (const cell of cells) {
-      cell._setRow(this)
+      cell._setRow(proxy)
     }
+
+    // biome-ignore lint/correctness/noConstructorReturn: Proxy wraps Row for virtual cell access
+    return proxy
+  }
+
+  [Symbol.for("nodejs.util.inspect.custom")](): string {
+    return `Row(index=${this._rowIndex}, cells=${this.length})`
   }
 
   getTab(): TabInstance {
@@ -25,6 +53,21 @@ export class Row extends Array<Cell> implements RowInstance {
 
   getRowIndex(): number {
     return this._rowIndex
+  }
+
+  get(col: string): Cell {
+    const idx = columnIndex(col.toUpperCase())
+    const existing = this[idx]
+    if (existing) return existing
+
+    return new Cell({
+      value: "",
+      label: col.toUpperCase(),
+      rowIndex: this._rowIndex,
+      cellIndex: idx,
+      tab: this._tab,
+      row: this,
+    })
   }
 
   async update(values: unknown[], start: string = "A"): Promise<void> {

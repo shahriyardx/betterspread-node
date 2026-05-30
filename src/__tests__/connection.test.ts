@@ -33,3 +33,17 @@ test("Connection accepts credentialsDict", () => {
   })
   expect(c).toBeDefined()
 })
+
+test("Connection custom inspect shows credentials path", () => {
+  const c = new Connection({ credentialsPath: "./creds.json" })
+  const inspected = c[Symbol.for("nodejs.util.inspect.custom")]()
+  expect(inspected).toBe('Connection(credentials="./creds.json")')
+})
+
+test("Connection custom inspect shows dict credential", () => {
+  const c = new Connection({
+    credentialsDict: { client_email: "a", private_key: "b" },
+  })
+  const inspected = c[Symbol.for("nodejs.util.inspect.custom")]()
+  expect(inspected).toBe('Connection(credentials="<dict>")')
+})

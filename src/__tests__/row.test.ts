@@ -27,6 +27,7 @@ function makeMockTab() {
     getSheetId: () => "test-sheet-id",
     getTitle: () => "Sheet1",
     getWorksheetId: () => 0,
+    getHeaders: () => [],
   }
 
   return { tab, mockClient, mockUpdate, mockClear, mockBatchUpdate, mockGet }
@@ -158,4 +159,63 @@ test("Row delete calls batchUpdate with deleteDimension", async () => {
   expect(req.deleteDimension.range.dimension).toBe("ROWS")
   expect(req.deleteDimension.range.startIndex).toBe(2)
   expect(req.deleteDimension.range.endIndex).toBe(3)
+})
+
+test("Row custom inspect shows index and cell count", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b", "c"], 2)
+  const row = new Row(cells, tab, 2)
+
+  const inspected = row[Symbol.for("nodejs.util.inspect.custom")]()
+  expect(inspected).toBe("Row(index=2, cells=3)")
+})
+
+test("Row get by column label returns correct cell", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b", "c"], 2)
+  const row = new Row(cells, tab, 2)
+
+  expect(row.get("A")?.value).toBe("a")
+  expect(row.get("B")?.value).toBe("b")
+  expect(row.get("C")?.value).toBe("c")
+})
+
+test("Row get by lowercase column label works", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["x", "y"], 1)
+  const row = new Row(cells, tab, 1)
+
+  expect(row.get("a")?.value).toBe("x")
+})
+
+test("Row get returns virtual cell for out of range column", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b"], 1)
+  const row = new Row(cells, tab, 1)
+
+  const cell = row.get("Z")
+  expect(cell.value).toBe("")
+  expect(cell.label).toBe("Z")
+  expect(cell.rowIndex).toBe(1)
+  expect(cell.cellIndex).toBe(25)
+})
+
+test("Row numeric index returns virtual cell for out of bounds", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b"], 1)
+  const row = new Row(cells, tab, 1)
+
+  const cell = row[5]
+  expect(cell?.value).toBe("")
+  expect(cell?.label).toBe("F")
+  expect(cell?.rowIndex).toBe(1)
+  expect(cell?.cellIndex).toBe(5)
+})
+
+test("Row numeric index handles negative", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b"], 1)
+  const row = new Row(cells, tab, 1)
+
+  expect(row[-1]).toBeUndefined()
 })

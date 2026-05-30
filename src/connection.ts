@@ -66,4 +66,11 @@ export class Connection {
     this._driveClient = drive({ version: "v3", auth: auth as any })
     return this._driveClient
   }
+
+  [Symbol.for("nodejs.util.inspect.custom")](): string {
+    if (this.opts.credentialsPath) {
+      return `Connection(credentials="${this.opts.credentialsPath}")`
+    }
+    return `Connection(credentials="<dict>")`
+  }
 }

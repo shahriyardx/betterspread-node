@@ -243,3 +243,21 @@ test("Sheet open escapes single quotes in sheet name", async () => {
   const q = mockDriveFilesList.mock.calls[0]![0]!.q
   expect(q).toContain("name = 'O\\'Brien Sheet'")
 })
+
+test("Sheet custom inspect before open shows name only", () => {
+  const { connection } = makeMockConnection()
+  const sheet = new Sheet("My Sheet", connection as any)
+
+  const inspected = sheet[Symbol.for("nodejs.util.inspect.custom")]()
+  expect(inspected).toBe('Sheet(name="My Sheet")')
+})
+
+test("Sheet custom inspect after open shows name and id", async () => {
+  const { connection } = makeMockConnection()
+  const sheet = new Sheet("abc123", connection as any)
+
+  await sheet.open()
+
+  const inspected = sheet[Symbol.for("nodejs.util.inspect.custom")]()
+  expect(inspected).toBe('Sheet(name="abc123", id="abc123")')
+})

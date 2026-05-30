@@ -24,6 +24,7 @@ function makeMockTab(overrides: Record<string, unknown> = {}) {
     getSheetId: () => "test-sheet-id",
     getTitle: () => "Sheet1",
     getWorksheetId: () => 0,
+    getHeaders: () => [],
     ...overrides,
   }
 
@@ -60,6 +61,70 @@ test("Cell toString returns value", () => {
 
   expect(cell.toString()).toBe("test-value")
   expect(String(cell)).toBe("test-value")
+})
+
+test("Cell custom inspect shows row, header, and value", () => {
+  const { tab } = makeMockTab()
+  const cell = new Cell({
+    value: "hello",
+    label: "B",
+    rowIndex: 3,
+    cellIndex: 1,
+    tab,
+    row: null,
+  })
+
+  const inspected = cell[Symbol.for("nodejs.util.inspect.custom")]()
+  expect(inspected).toBe(
+    'Cell(row=3, header="", value="hello")',
+  )
+})
+
+test("Cell header returns empty string when no headers cached", () => {
+  const { tab } = makeMockTab()
+  const cell = new Cell({
+    value: "hello",
+    label: "B",
+    rowIndex: 3,
+    cellIndex: 1,
+    tab,
+    row: null,
+  })
+
+  expect(cell.header).toBe("")
+})
+
+test("Cell header returns column header from tab cache", () => {
+  const headers = ["Name", "Email", "Age"]
+  const { tab } = makeMockTab({ getHeaders: () => headers })
+  const cell = new Cell({
+    value: "john@example.com",
+    label: "B",
+    rowIndex: 2,
+    cellIndex: 1,
+    tab,
+    row: null,
+  })
+
+  expect(cell.header).toBe("Email")
+})
+
+test("Cell custom inspect shows header when headers cached", () => {
+  const headers = ["Name", "Email", "Age"]
+  const { tab } = makeMockTab({ getHeaders: () => headers })
+  const cell = new Cell({
+    value: "john@example.com",
+    label: "B",
+    rowIndex: 2,
+    cellIndex: 1,
+    tab,
+    row: null,
+  })
+
+  const inspected = cell[Symbol.for("nodejs.util.inspect.custom")]()
+  expect(inspected).toBe(
+    'Cell(row=2, header="Email", value="john@example.com")',
+  )
 })
 
 test("Cell update calls API and returns new cell", async () => {

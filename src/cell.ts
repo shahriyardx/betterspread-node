@@ -55,6 +55,11 @@ export class Cell {
     return this.value
   }
 
+  get header(): string {
+    const headers = this.tab.getHeaders()
+    return headers[this.cellIndex] ?? ""
+  }
+
   toJSON(): string {
     return this.value
   }
@@ -62,6 +67,10 @@ export class Cell {
   [Symbol.toPrimitive](hint: string): string | number {
     if (hint === "number") return Number(this.value) || 0
     return this.value
+  }
+
+  [Symbol.for("nodejs.util.inspect.custom")](): string {
+    return `Cell(row=${this.rowIndex}, header="${this.header}", value="${this.value}")`
   }
 
   async update(newValue: string, opts: CellUpdateOptions = {}): Promise<Cell> {
