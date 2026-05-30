@@ -3,6 +3,7 @@ import { z } from "zod"
 import { Row } from "../row"
 import { Cell } from "../cell"
 import { ValidationError } from "../types"
+import { Format } from "../format"
 import type { sheets_v4 } from "@googleapis/sheets"
 
 function makeMockTab() {
@@ -71,25 +72,21 @@ test("Row cells have back-reference to parent Row", () => {
 })
 
 test("Row update calls API with correct range", async () => {
-  const { tab, mockUpdate } = makeMockTab()
+  const { tab, mockBatchUpdate } = makeMockTab()
   const cells = makeCells(tab, ["a", "b"], 1)
   const row = new Row(cells, tab, 1)
 
   await row.update(["x", "y"])
 
-  expect(mockUpdate).toHaveBeenCalledTimes(1)
-  expect(mockUpdate.mock.calls[0][0].range).toContain("A1")
-  expect(mockUpdate.mock.calls[0][0].requestBody.values).toEqual([["x", "y"]])
-})
-
-test("Row update with start column offset", async () => {
-  const { tab, mockUpdate } = makeMockTab()
-  const cells = makeCells(tab, ["a", "b", "c"], 2)
-  const row = new Row(cells, tab, 2)
-
-  await row.update(["z"], "C")
-
-  expect(mockUpdate.mock.calls[0][0].range).toContain("C2")
+  expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  expect(req.updateCells.range.startRowIndex).toBe(0)
+  expect(req.updateCells.range.startColumnIndex).toBe(0)
+  expect(req.updateCells.range.endColumnIndex).toBe(2)
+  expect(req.updateCells.rows[0].values).toEqual([
+    { userEnteredValue: { stringValue: "x" } },
+    { userEnteredValue: { stringValue: "y" } },
+  ])
 })
 
 test("Row clear calls API", async () => {
@@ -106,7 +103,7 @@ test("Row style calls batchUpdate", async () => {
   const cells = makeCells(tab, ["a", "b"], 2)
   const row = new Row(cells, tab, 2)
 
-  await row.style({ backgroundColor: { red: 0.5, green: 0.5, blue: 0.5 } })
+  await row.style(new Format({ backgroundColor: { red: 0.5, green: 0.5, blue: 0.5 } }))
 
   expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
   const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
@@ -224,38 +221,29 @@ test("Row numeric index handles negative", () => {
 })
 
 test("Row update with Cell objects applies format", async () => {
-  const { tab, mockBatchUpdate, mockUpdate } = makeMockTab()
+  const { tab, mockBatchUpdate } = makeMockTab()
   const cells = makeCells(tab, ["a", "b"], 2)
   const row = new Row(cells, tab, 2)
 
   const styledCell = new Cell({
     value: "x",
-    label: "A",
-    rowIndex: 2,
-    cellIndex: 0,
-    tab,
-    row: null,
     format: { backgroundColor: { red: 1, green: 0, blue: 0 } },
   })
 
   await row.update([styledCell, "y"])
 
-  // Called batchUpdate for the styled cell
   const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
-  expect(req.repeatCell.range.startRowIndex).toBe(1)
-  expect(req.repeatCell.range.endRowIndex).toBe(2)
-  expect(req.repeatCell.range.startColumnIndex).toBe(0)
-  expect(req.repeatCell.range.endColumnIndex).toBe(1)
-  expect(req.repeatCell.cell.userEnteredFormat).toEqual({
-    backgroundColor: { red: 1, green: 0, blue: 0 },
-  })
-
-  // Extracted value from Cell
-  expect(mockUpdate.mock.calls[0][0].requestBody.values).toEqual([["x", "y"]])
+  expect(req.updateCells.rows[0].values).toEqual([
+    {
+      userEnteredValue: { stringValue: "x" },
+      userEnteredFormat: { backgroundColor: { red: 1, green: 0, blue: 0 } },
+    },
+    { userEnteredValue: { stringValue: "y" } },
+  ])
 })
 
 test("Row update with object maps headers to columns", async () => {
-  const { tab, mockUpdate } = makeMockTab()
+  const { tab, mockBatchUpdate } = makeMockTab()
   const tabWithHeaders = {
     ...tab,
     getHeaders: () => ["Name", "Email", "Age"],
@@ -265,14 +253,16 @@ test("Row update with object maps headers to columns", async () => {
 
   await row.update({ Name: "Alice", Age: "25" })
 
-  // Name is col 0, Age is col 2 — sends contiguous A1:C1 with "" for Email
-  expect(mockUpdate.mock.calls[0][0].requestBody.values).toEqual([
-    ["Alice", "", "25"],
+  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  expect(req.updateCells.rows[0].values).toEqual([
+    { userEnteredValue: { stringValue: "Alice" } },
+    { userEnteredValue: { stringValue: "" } },
+    { userEnteredValue: { stringValue: "25" } },
   ])
 })
 
 test("Row update with object validates against schema", async () => {
-  const { tab, mockUpdate } = makeMockTab()
+  const { tab, mockBatchUpdate } = makeMockTab()
   const tabWithSchema = {
     ...tab,
     getHeaders: () => ["Name", "Score"],
@@ -285,11 +275,11 @@ test("Row update with object validates against schema", async () => {
     row.update({ Name: "Bob", Score: "bad" }),
   ).rejects.toThrow(ValidationError)
 
-  expect(mockUpdate).not.toHaveBeenCalled()
+  expect(mockBatchUpdate).not.toHaveBeenCalled()
 })
 
 test("Row update array validates against schema by column", async () => {
-  const { tab, mockUpdate } = makeMockTab()
+  const { tab, mockBatchUpdate } = makeMockTab()
   const tabWithSchema = {
     ...tab,
     getHeaders: () => ["name", "score"],
@@ -301,11 +291,11 @@ test("Row update array validates against schema by column", async () => {
   // "abc" fails z.number() for score column (index 1)
   await expect(row.update(["Bob", "abc"])).rejects.toThrow(ValidationError)
 
-  expect(mockUpdate).not.toHaveBeenCalled()
+  expect(mockBatchUpdate).not.toHaveBeenCalled()
 })
 
 test("Row update array passes valid values", async () => {
-  const { tab, mockUpdate } = makeMockTab()
+  const { tab, mockBatchUpdate } = makeMockTab()
   const tabWithSchema = {
     ...tab,
     getHeaders: () => ["name", "score"],
@@ -316,5 +306,5 @@ test("Row update array passes valid values", async () => {
 
   await row.update(["Alice", "95"])
 
-  expect(mockUpdate).toHaveBeenCalledTimes(1)
+  expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
 })

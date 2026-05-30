@@ -2,34 +2,18 @@ import type { sheets_v4 } from "@googleapis/sheets"
 import { ZodError } from "zod"
 import type { TabInstance, RowInstance } from "./types"
 import { ValidationError } from "./types"
-import { Style } from "./style"
+import { Format } from "./format"
 
 type CellFormat = sheets_v4.Schema$CellFormat
 
 export interface CellOptions {
   value: string
-  label: string
-  rowIndex: number
-  cellIndex: number
-  tab: TabInstance
-  row: RowInstance | null
-  format?: CellFormat | Style
-}
-
-export interface CellUpdateOptions {
-  inputFormat?: "raw" | "user_entered"
-  renderFormat?: "formatted" | "unformatted" | "formula"
-}
-
-const VALUE_RENDER_OPTION_MAP: Record<string, string> = {
-  formatted: "FORMATTED_VALUE",
-  unformatted: "UNFORMATTED_VALUE",
-  formula: "FORMULA",
-}
-
-const INPUT_OPTION_MAP: Record<string, string> = {
-  raw: "RAW",
-  user_entered: "USER_ENTERED",
+  label?: string
+  rowIndex?: number
+  cellIndex?: number
+  tab?: TabInstance
+  row?: RowInstance | null
+  format?: CellFormat | Format
 }
 
 export class Cell {
@@ -37,21 +21,28 @@ export class Cell {
   readonly label: string
   readonly rowIndex: number
   readonly cellIndex: number
-  readonly tab: TabInstance
+  readonly tab?: TabInstance
   readonly row: RowInstance | null
-  readonly format: CellFormat | null
+  format: Format | null
 
   constructor(opts: CellOptions) {
     this.value = opts.value
-    this.label = opts.label
-    this.rowIndex = opts.rowIndex
-    this.cellIndex = opts.cellIndex
+    this.label = opts.label ?? "A"
+    this.rowIndex = opts.rowIndex ?? 1
+    this.cellIndex = opts.cellIndex ?? 0
     this.tab = opts.tab
-    this.row = opts.row
+    this.row = opts.row ?? null
     this.format =
-      opts.format instanceof Style
-        ? opts.format.toCellFormat()
-        : (opts.format ?? null)
+      opts.format instanceof Format
+        ? opts.format
+        : opts.format
+          ? Format.fromCellFormat(opts.format)
+          : null
+  }
+
+  private requireTab(): TabInstance {
+    if (!this.tab) throw new Error("Cell has no tab reference")
+    return this.tab
   }
 
   /** @internal Set parent Row reference. Called by Row constructor. */
@@ -64,8 +55,8 @@ export class Cell {
   }
 
   get header(): string {
-    const headers = this.tab.getHeaders()
-    return headers[this.cellIndex] ?? ""
+    const headers = this.tab?.getHeaders()
+    return headers?.[this.cellIndex] ?? ""
   }
 
   toJSON(): string {
@@ -81,17 +72,25 @@ export class Cell {
     return `Cell(row=${this.rowIndex}, header="${this.header}", value="${this.value}")`
   }
 
-  async update(newValue: string, opts: CellUpdateOptions = {}): Promise<this> {
-    const client = this.tab.getClient()
+  async update(newValue: string | Cell, format?: Format): Promise<this> {
+    const tab = this.requireTab()
+    const client = tab.getClient()
+
+    // Resolve value and optional format
+    const isCell = newValue instanceof Cell
+    const strValue = isCell ? newValue.value : newValue
+    const cellFormat = isCell
+      ? (newValue.format?.toCellFormat() ?? undefined)
+      : (format?.toCellFormat() ?? undefined)
 
     // Validate against schema if applicable
-    const schema = this.tab.getSchema()
+    const schema = tab.getSchema()
     if (schema) {
       const header = this.header
       if (header && header in schema.shape) {
         const fieldSchema = schema.shape[header]
         try {
-          fieldSchema.parse(newValue)
+          fieldSchema.parse(strValue)
         } catch (err) {
           if (err instanceof ZodError) {
             throw new ValidationError(
@@ -104,54 +103,68 @@ export class Cell {
       }
     }
 
-    const range = `${this.label}${this.rowIndex}`
+    // Build cell data and push via batchUpdate
+    const cellData: Record<string, unknown> = {
+      userEnteredValue: { stringValue: strValue },
+    }
+    const fields = ["userEnteredValue"]
+    if (cellFormat) {
+      cellData.userEnteredFormat = cellFormat
+      fields.push("userEnteredFormat")
+    }
 
-    await client.spreadsheets.values.update({
-      spreadsheetId: this.tab.getSheetId(),
-      range: `${this.tab.getTitle()}!${range}`,
-      valueInputOption: INPUT_OPTION_MAP[opts.inputFormat ?? "raw"],
+    await client.spreadsheets.batchUpdate({
+      spreadsheetId: tab.getSheetId(),
       requestBody: {
-        values: [[newValue]],
+        requests: [
+          {
+            updateCells: {
+              range: {
+                sheetId: tab.getWorksheetId(),
+                startRowIndex: this.rowIndex - 1,
+                endRowIndex: this.rowIndex,
+                startColumnIndex: this.cellIndex,
+                endColumnIndex: this.cellIndex + 1,
+              },
+              rows: [{ values: [cellData] }],
+              fields: fields.join(","),
+            },
+          },
+        ],
       },
     })
 
-    if (opts.renderFormat && opts.renderFormat !== "formatted") {
-      const res = await client.spreadsheets.values.get({
-        spreadsheetId: this.tab.getSheetId(),
-        range: `${this.tab.getTitle()}!${range}`,
-        valueRenderOption: VALUE_RENDER_OPTION_MAP[opts.renderFormat],
-      })
-
-      ;(this as { value: string }).value = (res.data.values?.[0]?.[0] as string) ?? ""
-    } else {
-      ;(this as { value: string }).value = newValue
-    }
+    // Update local state
+    ;(this as { value: string }).value = strValue
+    if (cellFormat) this.format = Format.fromCellFormat(cellFormat)
 
     return this
   }
 
   async clear(): Promise<void> {
-    const client = this.tab.getClient()
+    const tab = this.requireTab()
+    const client = tab.getClient()
     const range = `${this.label}${this.rowIndex}`
 
     await client.spreadsheets.values.clear({
-      spreadsheetId: this.tab.getSheetId(),
-      range: `${this.tab.getTitle()}!${range}`,
+      spreadsheetId: tab.getSheetId(),
+      range: `${tab.getTitle()}!${range}`,
     })
   }
 
-  async style(obj: Style | CellFormat): Promise<void> {
-    const client = this.tab.getClient()
-    const cellFormat = obj instanceof Style ? obj.toCellFormat() : obj
+  async style(style: Format): Promise<void> {
+    const tab = this.requireTab()
+    const client = tab.getClient()
+    const cellFormat = style.toCellFormat()
 
     await client.spreadsheets.batchUpdate({
-      spreadsheetId: this.tab.getSheetId(),
+      spreadsheetId: tab.getSheetId(),
       requestBody: {
         requests: [
           {
             repeatCell: {
               range: {
-                sheetId: this.tab.getWorksheetId(),
+                sheetId: tab.getWorksheetId(),
                 startRowIndex: this.rowIndex - 1,
                 endRowIndex: this.rowIndex,
                 startColumnIndex: this.cellIndex,
@@ -169,17 +182,18 @@ export class Cell {
   }
 
   async delete(shift: "left" | "up" = "left"): Promise<void> {
-    const client = this.tab.getClient()
+    const tab = this.requireTab()
+    const client = tab.getClient()
     const isLeft = shift === "left"
 
     await client.spreadsheets.batchUpdate({
-      spreadsheetId: this.tab.getSheetId(),
+      spreadsheetId: tab.getSheetId(),
       requestBody: {
         requests: [
           {
             deleteRange: {
               range: {
-                sheetId: this.tab.getWorksheetId(),
+                sheetId: tab.getWorksheetId(),
                 startRowIndex: this.rowIndex - 1,
                 endRowIndex: this.rowIndex,
                 startColumnIndex: this.cellIndex,

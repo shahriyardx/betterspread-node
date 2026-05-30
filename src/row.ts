@@ -1,12 +1,9 @@
-import type { sheets_v4 } from "@googleapis/sheets"
 import { ZodError } from "zod"
 import { Cell } from "./cell"
 import type { TabInstance, RowInstance } from "./types"
 import { ValidationError } from "./types"
-import { Style } from "./style"
-import { columnLabel, columnIndex } from "./utils"
-
-type CellFormat = sheets_v4.Schema$CellFormat
+import { Format } from "./format"
+import { columnLabel, columnIndex, buildCellData, extractCellValue, extractCellFormat, validateArrayAgainstSchema } from "./utils"
 
 export class Row extends Array<Cell> implements RowInstance {
   private _tab: TabInstance
@@ -105,118 +102,75 @@ export class Row extends Array<Cell> implements RowInstance {
     return pairs
   }
 
-  async update(values: unknown[] | Record<string, unknown>, start: string = "A"): Promise<void> {
+  async update(values: unknown[] | Record<string, unknown>): Promise<void> {
     const client = this._tab.getClient()
 
     // Validate against schema if set
     const schema = this._tab.getSchema()
     const headers = this._tab.getHeaders()
     if (schema && headers.length > 0 && Array.isArray(values)) {
-      for (let i = 0; i < values.length; i++) {
-        const colIdx = i + (start.charCodeAt(0) - 65)
-        const header = headers[colIdx]
-        if (!header) continue
-        const fieldSchema = schema.shape[header]
-        if (!fieldSchema) continue
-        const item = values[i]
-        const val = item instanceof Cell ? item.value : item
-        try {
-          fieldSchema.parse(val)
-        } catch (err) {
-          if (err instanceof ZodError) {
-            throw new ValidationError(
-              `Schema validation failed for column "${header}": ${err.message}`,
-              err,
-            )
-          }
-          throw err
-        }
-      }
+      validateArrayAgainstSchema(values, headers, schema)
     }
 
     // Convert object to column-indexed pairs
     const colValPairs = Array.isArray(values)
-      ? values.map((v, i) => ({ colIndex: i + (start.charCodeAt(0) - 65), value: v }))
+      ? values.map((v, i) => ({ colIndex: i, value: v }))
       : this.objectToRowUpdate(values)
 
     if (colValPairs.length === 0) return
 
-    // Build contiguous array from min to max col for API call
+    // Build contiguous row data for updateCells
     const firstPair = colValPairs[0]
     const lastPair = colValPairs[colValPairs.length - 1]
     if (!firstPair || !lastPair) return
 
     const minCol = firstPair.colIndex
     const maxCol = lastPair.colIndex
-    const rawValues: unknown[] = []
+    const cellData: Record<string, unknown>[] = []
     let pairIdx = 0
     for (let c = minCol; c <= maxCol; c++) {
       const currentPair = colValPairs[pairIdx]
       if (currentPair && currentPair.colIndex === c) {
-        const v = currentPair.value
-        rawValues.push(v instanceof Cell ? v.value : v)
+        cellData.push(buildCellData(currentPair.value) as Record<string, unknown>)
         pairIdx++
       } else {
-        rawValues.push("")
+        cellData.push({ userEnteredValue: { stringValue: "" } })
       }
     }
 
-    const startLabel = columnLabel(minCol)
-    const range = `${startLabel}${this._rowIndex}`
-
-    await client.spreadsheets.values.update({
+    await client.spreadsheets.batchUpdate({
       spreadsheetId: this._tab.getSheetId(),
-      range: `${this._tab.getTitle()}!${range}`,
-      valueInputOption: "RAW",
       requestBody: {
-        values: [rawValues],
+        requests: [
+          {
+            updateCells: {
+              range: {
+                sheetId: this._tab.getWorksheetId(),
+                startRowIndex: this._rowIndex - 1,
+                endRowIndex: this._rowIndex,
+                startColumnIndex: minCol,
+                endColumnIndex: maxCol + 1,
+              },
+              rows: [{ values: cellData }],
+              fields: "userEnteredValue,userEnteredFormat",
+            },
+          },
+        ],
       },
     })
 
-    // Apply formatting from Cell objects
-    const formatRequests = colValPairs
-      .filter((p) => {
-        const cell = p.value
-        return cell instanceof Cell && cell.format !== null
-      })
-      .map((p) => {
-        const cell = p.value as Cell
-        return {
-          repeatCell: {
-            range: {
-              sheetId: this._tab.getWorksheetId(),
-              startRowIndex: this._rowIndex - 1,
-              endRowIndex: this._rowIndex,
-              startColumnIndex: p.colIndex,
-              endColumnIndex: p.colIndex + 1,
-            },
-            cell: { userEnteredFormat: cell.format ?? undefined },
-            fields: "userEnteredFormat",
-          },
-        }
-      })
-
-    if (formatRequests.length > 0) {
-      await client.spreadsheets.batchUpdate({
-        spreadsheetId: this._tab.getSheetId(),
-        requestBody: { requests: formatRequests },
-      })
-    }
-
     // Update local cells
     for (const p of colValPairs) {
-      if (p.colIndex < this.length) {
-        const val = p.value
-        this[p.colIndex] = new Cell({
-          value: val instanceof Cell ? val.value : String(val ?? ""),
-          label: columnLabel(p.colIndex),
-          rowIndex: this._rowIndex,
-          cellIndex: p.colIndex,
-          tab: this._tab,
-          row: this,
-          format: val instanceof Cell ? (val.format ?? undefined) : undefined,
-        })
-      }
+      const val = p.value
+      this[p.colIndex] = new Cell({
+        value: extractCellValue(val),
+        label: columnLabel(p.colIndex),
+        rowIndex: this._rowIndex,
+        cellIndex: p.colIndex,
+        tab: this._tab,
+        row: this,
+        format: extractCellFormat(val),
+      })
     }
   }
 
@@ -231,9 +185,9 @@ export class Row extends Array<Cell> implements RowInstance {
     })
   }
 
-  async style(obj: Style | CellFormat): Promise<void> {
+  async style(style: Format): Promise<void> {
     const client = this._tab.getClient()
-    const cellFormat = obj instanceof Style ? obj.toCellFormat() : obj
+    const cellFormat = style.toCellFormat()
 
     await client.spreadsheets.batchUpdate({
       spreadsheetId: this._tab.getSheetId(),
@@ -271,6 +225,21 @@ export class Row extends Array<Cell> implements RowInstance {
         values: [vals],
       },
     })
+
+    // Update local cells
+    const startIdx = this.length
+    const newCells = vals.map((v, i) => {
+      return new Cell({
+        value: extractCellValue(v),
+        label: columnLabel(startIdx + i),
+        rowIndex: this._rowIndex,
+        cellIndex: startIdx + i,
+        tab: this._tab,
+        row: this,
+        format: extractCellFormat(v),
+      })
+    })
+    this.push(...newCells)
   }
 
   async refetch(): Promise<void> {

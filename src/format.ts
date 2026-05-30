@@ -29,7 +29,7 @@ export interface BorderOptions {
   width?: number
 }
 
-export interface StyleOptions {
+export interface FormatOptions {
   /** Background color as hex string (e.g. "#ff0000"). Maps to backgroundColor. */
   bgColor?: string
   /** Text color as hex string (e.g. "#000000"). Maps to textFormat.foregroundColor. */
@@ -112,6 +112,31 @@ const BORDER_STYLE_MAP: Record<string, string> = {
   mediumDotted: "MEDIUM_DOTTED",
   mediumSolid: "MEDIUM_SOLID",
   thick: "THICK",
+  // Reverse mappings for round-trip from API
+  SOLID: "SOLID",
+  DASHED: "DASHED",
+  DOTTED: "DOTTED",
+  DOUBLE: "DOUBLE",
+  NONE: "NONE",
+  MEDIUM: "MEDIUM",
+  MEDIUM_DASHED: "MEDIUM_DASHED",
+  MEDIUM_DOTTED: "MEDIUM_DOTTED",
+  MEDIUM_SOLID: "MEDIUM_SOLID",
+  THICK: "THICK",
+}
+
+// Reverse map: API uppercase → BorderOptions lowercase
+const BORDER_STYLE_REVERSE_MAP: Record<string, BorderOptions["style"] | undefined> = {
+  SOLID: "solid",
+  DASHED: "dashed",
+  DOTTED: "dotted",
+  DOUBLE: "double",
+  NONE: "none",
+  MEDIUM: "medium",
+  MEDIUM_DASHED: "mediumDashed",
+  MEDIUM_DOTTED: "mediumDotted",
+  MEDIUM_SOLID: "mediumSolid",
+  THICK: "thick",
 }
 
 function toCellFormatBorder(border?: BorderOptions): Border | undefined {
@@ -120,44 +145,53 @@ function toCellFormatBorder(border?: BorderOptions): Border | undefined {
   if (border.color) b.color = border.color
   if (border.colorStyle) b.colorStyle = border.colorStyle
   if (border.style) b.style = BORDER_STYLE_MAP[border.style]
-  if (border.width !== undefined) b.width = border.width
+  if (border.width != null) b.width = border.width
   return Object.keys(b).length > 0 ? b : undefined
 }
 
-export class Style {
-  readonly bgColor?: string
-  readonly textColor?: string
-  readonly bold?: boolean
-  readonly italic?: boolean
-  readonly strikethrough?: boolean
-  readonly underline?: boolean
-  readonly fontFamily?: string
-  readonly fontSize?: number
-  readonly link?: Link
-  readonly horizontalAlign?: "left" | "center" | "right"
-  readonly verticalAlign?: "top" | "middle" | "bottom"
+function fromCellFormatBorder(border: Border): BorderOptions | undefined {
+  const b: BorderOptions = {}
+  if (border.color) b.color = border.color
+  if (border.colorStyle) b.colorStyle = border.colorStyle
+  if (border.style) b.style = BORDER_STYLE_REVERSE_MAP[border.style] ?? border.style.toLowerCase() as BorderOptions["style"]
+  if (border.width != null) b.width = border.width
+  return Object.keys(b).length > 0 ? b : undefined
+}
 
-  readonly backgroundColor?: Color
-  readonly backgroundColorStyle?: ColorStyle
-  readonly borders?: {
+export class Format {
+  bgColor?: string
+  textColor?: string
+  bold?: boolean
+  italic?: boolean
+  strikethrough?: boolean
+  underline?: boolean
+  fontFamily?: string
+  fontSize?: number
+  link?: Link
+  horizontalAlign?: "left" | "center" | "right"
+  verticalAlign?: "top" | "middle" | "bottom"
+
+  backgroundColor?: Color
+  backgroundColorStyle?: ColorStyle
+  borders?: {
     top?: BorderOptions
     bottom?: BorderOptions
     left?: BorderOptions
     right?: BorderOptions
   }
-  readonly horizontalAlignment?: string
-  readonly verticalAlignment?: string
-  readonly hyperlinkDisplayType?: "LINKED" | "PLAIN_TEXT"
-  readonly numberFormat?: NumberFormat
-  readonly padding?: Padding
-  readonly textDirection?: "LEFT_TO_RIGHT" | "RIGHT_TO_LEFT"
-  readonly textFormat?: TextFormat
-  readonly textRotation?: TextRotation
-  readonly wrapStrategy?: "OVERFLOW_CELL" | "LEGACY_WRAP" | "CLIP" | "WRAP"
+  horizontalAlignment?: string
+  verticalAlignment?: string
+  hyperlinkDisplayType?: "LINKED" | "PLAIN_TEXT"
+  numberFormat?: NumberFormat
+  padding?: Padding
+  textDirection?: "LEFT_TO_RIGHT" | "RIGHT_TO_LEFT"
+  textFormat?: TextFormat
+  textRotation?: TextRotation
+  wrapStrategy?: "OVERFLOW_CELL" | "LEGACY_WRAP" | "CLIP" | "WRAP"
 
-  readonly raw?: CellFormat
+  raw?: CellFormat
 
-  constructor(opts: StyleOptions = {}) {
+  constructor(opts: FormatOptions = {}) {
     this.bgColor = opts.bgColor
     this.textColor = opts.textColor
     this.bold = opts.bold
@@ -182,6 +216,29 @@ export class Style {
     this.textRotation = opts.textRotation
     this.wrapStrategy = opts.wrapStrategy
     this.raw = opts.raw
+  }
+
+  static fromCellFormat(format: CellFormat): Format {
+    const opts: FormatOptions = {}
+    if (format.backgroundColor) opts.backgroundColor = format.backgroundColor
+    if (format.backgroundColorStyle) opts.backgroundColorStyle = format.backgroundColorStyle
+    if (format.borders) {
+      opts.borders = {}
+      if (format.borders.top) opts.borders.top = fromCellFormatBorder(format.borders.top)
+      if (format.borders.bottom) opts.borders.bottom = fromCellFormatBorder(format.borders.bottom)
+      if (format.borders.left) opts.borders.left = fromCellFormatBorder(format.borders.left)
+      if (format.borders.right) opts.borders.right = fromCellFormatBorder(format.borders.right)
+    }
+    if (format.horizontalAlignment) opts.horizontalAlignment = format.horizontalAlignment as Format["horizontalAlignment"]
+    if (format.verticalAlignment) opts.verticalAlignment = format.verticalAlignment as Format["verticalAlignment"]
+    if (format.hyperlinkDisplayType) opts.hyperlinkDisplayType = format.hyperlinkDisplayType as Format["hyperlinkDisplayType"]
+    if (format.numberFormat) opts.numberFormat = format.numberFormat
+    if (format.padding) opts.padding = format.padding
+    if (format.textDirection) opts.textDirection = format.textDirection as Format["textDirection"]
+    if (format.textFormat) opts.textFormat = format.textFormat
+    if (format.textRotation) opts.textRotation = format.textRotation
+    if (format.wrapStrategy) opts.wrapStrategy = format.wrapStrategy as Format["wrapStrategy"]
+    return new Format(opts)
   }
 
   toCellFormat(): CellFormat {

@@ -4,7 +4,7 @@ import { Cell } from "./cell"
 import { Row } from "./row"
 import type { Sheet } from "./sheet"
 import { ValidationError } from "./types"
-import { columnLabel, columnIndex, parseCellAddress } from "./utils"
+import { columnLabel, columnIndex, parseCellAddress, buildCellData, validateArrayAgainstSchema } from "./utils"
 
 export class Tab {
   private sheet: Sheet
@@ -62,52 +62,12 @@ export class Tab {
     return this.worksheetId
   }
 
-  async values(
-    rangeOrOpts?: string | { range?: string; format?: boolean },
-  ): Promise<Row[]> {
-    const range =
-      typeof rangeOrOpts === "string" ? rangeOrOpts : rangeOrOpts?.range
-    const opts = typeof rangeOrOpts === "object" ? rangeOrOpts : undefined
+  async values(range?: string): Promise<Row[]> {
     const actualRange = range ?? `${this.title}!A1:ZZZ`
-
-    if (opts?.format) {
-      return this.valuesWithFormat(actualRange)
-    }
-
-    const client = this.getClient()
-    const res = await client.spreadsheets.values.get({
-      spreadsheetId: this.getSheetId(),
-      range: actualRange,
-    })
-
-    const rows = (res.data.values as unknown[][]) ?? []
-
-    // Cache headers from first row
-    const firstRow = rows[0]
-    if (firstRow) {
-      this._setHeaders(firstRow.map((h) => String(h ?? "")))
-    }
-
-    return rows.map((rowValues, i) => {
-      const cells = rowValues.map((val, j) => {
-        return new Cell({
-          value: String(val ?? ""),
-          label: columnLabel(j),
-          rowIndex: i + 1,
-          cellIndex: j,
-          tab: this,
-          row: null,
-        })
-      })
-      return new Row(cells, this, i + 1)
-    })
-  }
-
-  private async valuesWithFormat(range: string): Promise<Row[]> {
     const client = this.getClient()
     const res = await client.spreadsheets.get({
       spreadsheetId: this.getSheetId(),
-      ranges: [range],
+      ranges: [actualRange],
       fields:
         "sheets.data.rowData.values(effectiveValue,userEnteredFormat)",
     })
@@ -243,72 +203,26 @@ export class Tab {
       if (this._headers.length === 0) {
         throw new Error("Tab headers not cached. Call values() first or use object append.")
       }
-      for (let i = 0; i < rowArray.length && i < this._headers.length; i++) {
-        const header = this._headers[i]!
-        const fieldSchema = this._schema.shape[header]
-        if (!fieldSchema) continue
-        const item = rowArray[i]!
-        const val = item instanceof Cell ? item.value : item
-        try {
-          fieldSchema.parse(val)
-        } catch (err) {
-          if (err instanceof ZodError) {
-            throw new ValidationError(
-              `Schema validation failed for column "${header}": ${err.message}`,
-              err,
-            )
-          }
-          throw err
-        }
-      }
+      validateArrayAgainstSchema(rowArray, this._headers, this._schema)
     }
 
-    // Extract raw values from Cell objects
-    const rawValues = rowArray.map((v) => (v instanceof Cell ? v.value : v))
+    // Build CellData for each column — value + optional format in one shot
+    const cellData = rowArray.map(buildCellData)
 
-    const appendRes = await client.spreadsheets.values.append({
+    await client.spreadsheets.batchUpdate({
       spreadsheetId: this.getSheetId(),
-      range: `${this.title}!A:A`,
-      valueInputOption: "RAW",
       requestBody: {
-        values: [rawValues],
+        requests: [
+          {
+            appendCells: {
+              sheetId: this.worksheetId,
+              rows: [{ values: cellData }],
+              fields: "userEnteredValue,userEnteredFormat",
+            },
+          },
+        ],
       },
     })
-
-    // Apply formatting from Cell objects with .format
-    const updatedRange = appendRes.data.updates?.updatedRange ?? ""
-    const rowMatch = updatedRange.match(/(\d+):/)
-    const appendedRow = rowMatch ? parseInt(rowMatch[1] ?? "", 10) : null
-
-    if (appendedRow) {
-      const formatRequests = rowArray
-        .map((v: unknown, i: number) => {
-          if (v instanceof Cell && v.format) {
-            return {
-              repeatCell: {
-                range: {
-                  sheetId: this.worksheetId,
-                  startRowIndex: appendedRow - 1,
-                  endRowIndex: appendedRow,
-                  startColumnIndex: i,
-                  endColumnIndex: i + 1,
-                },
-                cell: { userEnteredFormat: v.format },
-                fields: "userEnteredFormat",
-              },
-            }
-          }
-          return null
-        })
-        .filter((r): r is NonNullable<typeof r> => r !== null)
-
-      if (formatRequests.length > 0) {
-        await client.spreadsheets.batchUpdate({
-          spreadsheetId: this.getSheetId(),
-          requestBody: { requests: formatRequests },
-        })
-      }
-    }
 
     if (!getRow) return null
 

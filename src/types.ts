@@ -30,15 +30,6 @@ export class TabNotFoundError extends Error {
   }
 }
 
-export interface CellProps {
-  value: string
-  label: string
-  rowIndex: number
-  cellIndex: number
-  tab: TabInstance
-  row: RowInstance | null
-}
-
 export interface TabInstance {
   getClient(): sheets_v4.Sheets
   getSheetId(): string

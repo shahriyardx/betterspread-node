@@ -28,6 +28,68 @@ export function parseCellAddress(address: string): CellAddress | null {
   return { label: m[1] ?? "", row: parseInt(m[2] ?? "0", 10) }
 }
 
+import type { sheets_v4 } from "@googleapis/sheets"
+import { ZodError } from "zod"
+import { Cell } from "./cell"
+import { ValidationError } from "./types"
+import type { z } from "zod"
+
+type CellFormat = sheets_v4.Schema$CellFormat
+
+/** Extract string value from a Cell object or raw value. Shared by append/update. */
+export function extractCellValue(v: unknown): string {
+  return v instanceof Cell ? v.value : String(v ?? "")
+}
+
+/** Extract CellFormat from a Cell object's Format. Undefined if no format. */
+export function extractCellFormat(v: unknown): CellFormat | undefined {
+  return v instanceof Cell && v.format ? v.format.toCellFormat() : undefined
+}
+
+/** Build a Google API cell data object from value + optional format. */
+export function buildCellData(
+  v: unknown,
+): { userEnteredValue: { stringValue: string }; userEnteredFormat?: CellFormat } {
+  const value = extractCellValue(v)
+  const format = extractCellFormat(v)
+  const cell: { userEnteredValue: { stringValue: string }; userEnteredFormat?: CellFormat } = {
+    userEnteredValue: { stringValue: value },
+  }
+  if (format) cell.userEnteredFormat = format
+  return cell
+}
+
+/**
+ * Validate array values against a Zod schema by column position.
+ * Throws ValidationError on mismatch. Shared by tab.append / row.update.
+ */
+export function validateArrayAgainstSchema(
+  values: unknown[],
+  headers: string[],
+  schema: z.ZodObject,
+): void {
+  for (let i = 0; i < values.length; i++) {
+    const colIdx = i
+    const header = headers[colIdx]
+    if (!header) continue
+    const fieldSchema = schema.shape[header]
+    if (!fieldSchema) continue
+    const item = values[i]
+    const val = item instanceof Cell ? item.value : item
+    try {
+      fieldSchema.parse(val)
+    } catch (err) {
+      if (err instanceof ZodError) {
+        throw new ValidationError(
+          `Schema validation failed for column "${header}": ${err.message}`,
+          err,
+        )
+      }
+      throw err
+    }
+  }
+}
+
 /** Convert hex color string to Google Sheets Color object. */
 export function hexToColor(
   hex: string,

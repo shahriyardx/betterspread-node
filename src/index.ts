@@ -4,9 +4,9 @@ export { Sheet } from "./sheet"
 export { Tab } from "./tab"
 export { Row } from "./row"
 export { Cell } from "./cell"
-export type { CellOptions, CellUpdateOptions } from "./cell"
-export { Style } from "./style"
-export type { StyleOptions } from "./style"
+export type { CellOptions } from "./cell"
+export { Format } from "./format"
+export type { FormatOptions } from "./format"
 export {
   ValueError,
   ValidationError,

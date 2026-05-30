@@ -1,7 +1,8 @@
 import { test, expect, mock } from "bun:test"
 import { z } from "zod"
-import { Cell, type CellUpdateOptions } from "../cell"
+import { Cell } from "../cell"
 import { ValidationError } from "../types"
+import { Format } from "../format"
 import type { sheets_v4 } from "@googleapis/sheets"
 
 function makeMockTab(overrides: Record<string, unknown> = {}) {
@@ -128,9 +129,9 @@ test("Cell custom inspect shows header when headers cached", () => {
   )
 })
 
-test("Cell stores optional format from CellFormat object", () => {
+test("Cell stores optional format as Format wrapping CellFormat", () => {
   const { tab } = makeMockTab()
-  const format = { backgroundColor: { red: 1, green: 0, blue: 0 } }
+  const rawFormat = { backgroundColor: { red: 1, green: 0, blue: 0 } }
   const cell = new Cell({
     value: "x",
     label: "A",
@@ -138,10 +139,11 @@ test("Cell stores optional format from CellFormat object", () => {
     cellIndex: 0,
     tab,
     row: null,
-    format,
+    format: rawFormat,
   })
 
-  expect(cell.format).toEqual(format)
+  expect(cell.format).toBeInstanceOf(Format)
+  expect(cell.format!.backgroundColor).toEqual({ red: 1, green: 0, blue: 0 })
 })
 
 test("Cell format is null when not provided", () => {
@@ -159,7 +161,7 @@ test("Cell format is null when not provided", () => {
 })
 
 test("Cell update calls API and mutates in place", async () => {
-  const { tab, mockUpdate } = makeMockTab()
+  const { tab, mockBatchUpdate } = makeMockTab()
   const cell = new Cell({
     value: "old",
     label: "A",
@@ -171,46 +173,14 @@ test("Cell update calls API and mutates in place", async () => {
 
   const updated = await cell.update("new-value")
 
-  expect(mockUpdate).toHaveBeenCalledTimes(1)
-  expect(mockUpdate.mock.calls[0][0].requestBody.values).toEqual([
-    ["new-value"],
+  expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  expect(req.updateCells.rows[0].values).toEqual([
+    { userEnteredValue: { stringValue: "new-value" } },
   ])
   expect(updated.value).toBe("new-value")
   expect(updated).toBe(cell) // mutates and returns same instance
   expect(cell.value).toBe("new-value") // value updated in-place
-})
-
-test("Cell update with formula input_format", async () => {
-  const { tab, mockUpdate } = makeMockTab()
-  const cell = new Cell({
-    value: "",
-    label: "A",
-    rowIndex: 1,
-    cellIndex: 0,
-    tab,
-    row: null,
-  })
-
-  await cell.update("=SUM(A1:A10)", { inputFormat: "user_entered" })
-
-  expect(mockUpdate.mock.calls[0][0].valueInputOption).toBe("USER_ENTERED")
-})
-
-test("Cell update with render_format triggers refetch", async () => {
-  const { tab, mockGet, mockUpdate } = makeMockTab()
-  const cell = new Cell({
-    value: "",
-    label: "A",
-    rowIndex: 1,
-    cellIndex: 0,
-    tab,
-    row: null,
-  })
-
-  await cell.update("=SUM(A1:A10)", { renderFormat: "formula" })
-
-  expect(mockGet).toHaveBeenCalledTimes(1)
-  expect(mockGet.mock.calls[0][0].valueRenderOption).toBe("FORMULA")
 })
 
 test("Cell clear calls API", async () => {
@@ -239,7 +209,7 @@ test("Cell style calls batchUpdate", async () => {
     row: null,
   })
 
-  await cell.style({ backgroundColor: { red: 1, green: 0, blue: 0 } })
+  await cell.style(new Format({ backgroundColor: { red: 1, green: 0, blue: 0 } }))
 
   expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
   const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
@@ -284,7 +254,7 @@ test("Cell delete with shift=up sends ROWS", async () => {
 })
 
 test("Cell update passes through when no schema set", async () => {
-  const { tab, mockUpdate } = makeMockTab()
+  const { tab, mockBatchUpdate } = makeMockTab()
   const cell = new Cell({
     value: "old",
     label: "A",
@@ -297,7 +267,7 @@ test("Cell update passes through when no schema set", async () => {
   const updated = await cell.update("new-value")
 
   expect(updated.value).toBe("new-value")
-  expect(mockUpdate).toHaveBeenCalledTimes(1)
+  expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
 })
 
 test("Cell update validates against schema column type", async () => {
@@ -321,7 +291,7 @@ test("Cell update validates against schema column type", async () => {
 
 test("Cell update passes validation when schema matches", async () => {
   const headers = ["Name", "Score"]
-  const { tab, mockUpdate } = makeMockTab({
+  const { tab, mockBatchUpdate } = makeMockTab({
     getHeaders: () => headers,
     getSchema: () => z.object({ Name: z.string(), Score: z.string() }),
   })
@@ -337,5 +307,66 @@ test("Cell update passes validation when schema matches", async () => {
   const updated = await cell.update("99")
 
   expect(updated.value).toBe("99")
-  expect(mockUpdate).toHaveBeenCalledTimes(1)
+  expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+})
+
+test("Cell update with Cell object applies value and format via batchUpdate", async () => {
+  const { tab, mockBatchUpdate } = makeMockTab()
+  const cell = new Cell({
+    value: "old",
+    label: "A",
+    rowIndex: 1,
+    cellIndex: 0,
+    tab,
+    row: null,
+  })
+
+  const newCell = new Cell({
+    value: "new-val",
+    format: { backgroundColor: { red: 1, green: 0, blue: 0 } },
+  })
+
+  const updated = await cell.update(newCell)
+
+  expect(updated).toBe(cell)
+  expect(cell.value).toBe("new-val")
+  expect(cell.format).toBeInstanceOf(Format)
+  expect(cell.format!.backgroundColor).toEqual({ red: 1, green: 0, blue: 0 })
+
+  expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  expect(req.updateCells.range.startRowIndex).toBe(0)
+  expect(req.updateCells.range.endRowIndex).toBe(1)
+  expect(req.updateCells.range.startColumnIndex).toBe(0)
+  expect(req.updateCells.range.endColumnIndex).toBe(1)
+  expect(req.updateCells.rows[0].values).toEqual([
+    {
+      userEnteredValue: { stringValue: "new-val" },
+      userEnteredFormat: { backgroundColor: { red: 1, green: 0, blue: 0 } },
+    },
+  ])
+  expect(req.updateCells.fields).toBe("userEnteredValue,userEnteredFormat")
+})
+
+test("Cell update with Cell object without format uses value only", async () => {
+  const { tab, mockBatchUpdate } = makeMockTab()
+  const cell = new Cell({
+    value: "old",
+    label: "A",
+    rowIndex: 1,
+    cellIndex: 0,
+    tab,
+    row: null,
+  })
+
+  const newCell = new Cell({ value: "just-value" })
+  await cell.update(newCell)
+
+  expect(cell.value).toBe("just-value")
+
+  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  expect(req.updateCells.fields).toBe("userEnteredValue")
+  expect(req.updateCells.rows[0].values).toEqual([
+    { userEnteredValue: { stringValue: "just-value" } },
+  ])
 })
