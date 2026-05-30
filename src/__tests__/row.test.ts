@@ -57,6 +57,15 @@ test("Row extends Array and contains Cells", () => {
   expect(row[1].value).toBe("b")
 })
 
+test("Row cells have back-reference to parent Row", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b"], 1)
+  const row = new Row(cells, tab, 1)
+
+  expect(row[0].row).toBe(row)
+  expect(row[1].row).toBe(row)
+})
+
 test("Row update calls API with correct range", async () => {
   const { tab, mockUpdate } = makeMockTab()
   const cells = makeCells(tab, ["a", "b"], 1)

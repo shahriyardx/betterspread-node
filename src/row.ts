@@ -14,6 +14,9 @@ export class Row extends Array<Cell> implements RowInstance {
     super(...cells)
     this._tab = tab
     this._rowIndex = rowIndex
+    for (const cell of cells) {
+      cell._setRow(this)
+    }
   }
 
   getTab(): TabInstance {

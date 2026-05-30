@@ -46,6 +46,11 @@ export class Cell {
     this.row = opts.row
   }
 
+  /** @internal Set parent Row reference. Called by Row constructor. */
+  _setRow(row: RowInstance): void {
+    ;(this as { row: RowInstance | null }).row = row
+  }
+
   toString(): string {
     return this.value
   }
