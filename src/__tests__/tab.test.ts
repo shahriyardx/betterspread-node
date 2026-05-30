@@ -90,7 +90,7 @@ test("Tab values with custom range", async () => {
   const { sheet, mockGetSpreadsheet } = makeMockSheet()
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
-  await tab.values("Sheet1!A1:B2")
+  await tab.values({ range: "Sheet1!A1:B2" })
 
   expect(mockGetSpreadsheet.mock.calls[0][0].ranges![0]).toBe("Sheet1!A1:B2")
 })
@@ -194,7 +194,7 @@ test("Tab values with FORMULA render option uses spreadsheets.values.get", async
   )
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
-  const rows = await tab.values("Sheet1!A1:B1", "FORMULA")
+  const rows = await tab.values({ range: "Sheet1!A1:B1", valueRenderOption: "FORMULA" })
 
   expect(mockGet.mock.calls[0][0].valueRenderOption).toBe("FORMULA")
   expect(rows[0][0].value).toBe("=SUM(A1:A10)")
@@ -215,7 +215,7 @@ test("Tab getRow with FORMULA render option passes through", async () => {
   )
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
-  const row = await tab.getRow(1, "FORMULA")
+  const row = await tab.getRow({ serialNo: 1, valueRenderOption: "FORMULA" })
 
   expect(mockGet.mock.calls[0][0].valueRenderOption).toBe("FORMULA")
   expect(row[0].value).toBe("=SUM(A1:A10)")
@@ -225,7 +225,7 @@ test("Tab getRow returns Row with correct index", async () => {
   const { sheet, mockGetSpreadsheet } = makeMockSheet()
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
-  const row = await tab.getRow(1)
+  const row = await tab.getRow({ serialNo: 1 })
 
   expect(mockGetSpreadsheet.mock.calls[0][0].ranges![0]).toContain("A1")
   expect(row).toHaveLength(2)
@@ -239,7 +239,7 @@ test("Tab getRow with empty result returns empty Row", async () => {
   )
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
-  const row = await tab.getRow(5)
+  const row = await tab.getRow({ serialNo: 5 })
   expect(row).toHaveLength(0)
 })
 
@@ -247,7 +247,7 @@ test("Tab getCell returns Cell with correct metadata", async () => {
   const { sheet, mockGet } = makeMockSheet()
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
-  const cell = await tab.getCell("B3")
+  const cell = await tab.getCell({ cellName: "B3" })
 
   expect(cell.value).toBe("a")
   expect(cell.label).toBe("B")
@@ -259,7 +259,7 @@ test("Tab getCell passes valueRenderOption to API", async () => {
   const { sheet, mockGet } = makeMockSheet()
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
-  await tab.getCell("A1", "FORMULA")
+  await tab.getCell({ cellName: "A1", valueRenderOption: "FORMULA" })
 
   expect(mockGet.mock.calls[0][0].valueRenderOption).toBe("FORMULA")
 })

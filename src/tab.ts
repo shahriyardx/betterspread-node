@@ -22,6 +22,21 @@ export interface AppendOpts {
   getRow?: boolean
 }
 
+export interface ValuesOpts {
+  range?: string
+  valueRenderOption?: ValueRenderOption
+}
+
+export interface GetRowOpts {
+  serialNo: number
+  valueRenderOption?: ValueRenderOption
+}
+
+export interface GetCellOpts {
+  cellName: string
+  valueRenderOption?: ValueRenderOption
+}
+
 export class Tab {
   private sheet: Sheet
   private title: string
@@ -78,11 +93,9 @@ export class Tab {
     return this.worksheetId
   }
 
-  async values(
-    range?: string,
-    valueRenderOption?: ValueRenderOption,
-  ): Promise<Row[]> {
+  async values(opts?: ValuesOpts): Promise<Row[]> {
     const client = this.getClient()
+    const { range, valueRenderOption } = opts ?? {}
     const actualRange = range ?? `${this.title}!A1:ZZZ`
 
     // When render option specified, use spreadsheets.values.get (no format data)
@@ -152,21 +165,17 @@ export class Tab {
     })
   }
 
-  async getRow(
-    serialNo: number,
-    valueRenderOption?: ValueRenderOption,
-  ): Promise<Row> {
-    const rows = await this.values(
-      `${this.title}!A${serialNo}:ZZZ${serialNo}`,
+  async getRow(opts: GetRowOpts): Promise<Row> {
+    const { serialNo, valueRenderOption } = opts
+    const rows = await this.values({
+      range: `${this.title}!A${serialNo}:ZZZ${serialNo}`,
       valueRenderOption,
-    )
+    })
     return rows[0] ?? new Row([], this, serialNo)
   }
 
-  async getCell(
-    cellName: string,
-    valueRenderOption: ValueRenderOption = "FORMATTED_VALUE",
-  ): Promise<Cell> {
+  async getCell(opts: GetCellOpts): Promise<Cell> {
+    const { cellName, valueRenderOption = "FORMATTED_VALUE" } = opts
     const client = this.getClient()
 
     const res = await client.spreadsheets.values.get({
