@@ -1,5 +1,8 @@
 import { test, expect, mock } from "bun:test"
+import { z } from "zod"
 import { Tab } from "../tab"
+import { Cell } from "../cell"
+import { ValidationError } from "../types"
 import type { sheets_v4 } from "@googleapis/sheets"
 
 function makeMockSheet() {
@@ -38,7 +41,14 @@ function makeMockSheet() {
     getTitle: () => "Sheet1",
   }
 
-  return { sheet, mockClient, mockGet, mockAppend, mockBatchUpdate }
+  return {
+    sheet,
+    mockClient,
+    mockGet,
+    mockAppend,
+    mockBatchUpdate,
+    mockGetSpreadsheet,
+  }
 }
 
 test("Tab values returns array of Rows", async () => {
@@ -59,6 +69,94 @@ test("Tab values with custom range", async () => {
   await tab.values("Sheet1!A1:B2")
 
   expect(mockGet.mock.calls[0][0].range).toBe("Sheet1!A1:B2")
+})
+
+test("Tab values with format uses spreadsheets.get and returns format", async () => {
+  const { sheet, mockGetSpreadsheet } = makeMockSheet()
+  mockGetSpreadsheet.mockImplementation(() =>
+    Promise.resolve({
+      data: {
+        sheets: [
+          {
+            data: [
+              {
+                rowData: [
+                  {
+                    values: [
+                      {
+                        effectiveValue: { stringValue: "a" },
+                        userEnteredFormat: {
+                          backgroundColor: { red: 1, green: 0, blue: 0 },
+                        },
+                      },
+                      { effectiveValue: { stringValue: "b" } },
+                    ],
+                  },
+                  {
+                    values: [
+                      { effectiveValue: { stringValue: "c" } },
+                      { effectiveValue: { numberValue: 42 } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  )
+  const tab = new Tab(sheet, "Sheet1", 0, {})
+  const rows = await tab.values({ format: true })
+
+  expect(rows).toHaveLength(2)
+  expect(rows[0][0].value).toBe("a")
+  expect(rows[0][1].value).toBe("b")
+  expect(rows[1][0].value).toBe("c")
+  expect(rows[1][1].value).toBe("42")
+
+  // Format populated
+  expect(rows[0][0].format).toEqual({
+    backgroundColor: { red: 1, green: 0, blue: 0 },
+  })
+  // Cell without format
+  expect(rows[0][1].format).toBeNull()
+
+  // Uses spreadsheets.get with correct fields
+  const callArgs = mockGetSpreadsheet.mock.calls[0][0]
+  expect(callArgs.fields).toContain("userEnteredFormat")
+})
+
+test("Tab values format uses NUMBER value type", async () => {
+  const { sheet, mockGetSpreadsheet } = makeMockSheet()
+  mockGetSpreadsheet.mockImplementation(() =>
+    Promise.resolve({
+      data: {
+        sheets: [
+          {
+            data: [
+              {
+                rowData: [
+                  {
+                    values: [
+                      { effectiveValue: { numberValue: 100 } },
+                      { effectiveValue: { boolValue: true } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  )
+  const tab = new Tab(sheet, "Sheet1", 0, {})
+
+  const rows = await tab.values({ format: true })
+
+  expect(rows[0][0].value).toBe("100")
+  expect(rows[0][1].value).toBe("true")
 })
 
 test("Tab getRow returns Row with correct index", async () => {
@@ -111,6 +209,43 @@ test("Tab append without getRow returns null", async () => {
   expect(result).toBeNull()
   expect(mockAppend).toHaveBeenCalledTimes(1)
   expect(mockAppend.mock.calls[0][0].requestBody.values).toEqual([["x", "y"]])
+})
+
+test("Tab append with Cell objects extracts values and applies format", async () => {
+  const { sheet, mockAppend, mockBatchUpdate } = makeMockSheet()
+  mockAppend.mockImplementation(() =>
+    Promise.resolve({
+      data: { updates: { updatedRange: "Sheet1!A3:C3" } },
+    }),
+  )
+  const tab = new Tab(sheet, "Sheet1", 0, {})
+
+  const styledCell = new Cell({
+    value: "x",
+    label: "A",
+    rowIndex: 1,
+    cellIndex: 0,
+    tab: {
+      getClient: () => ({}) as any,
+      getSheetId: () => "",
+      getTitle: () => "",
+      getWorksheetId: () => 0,
+      getHeaders: () => [],
+    },
+    row: null,
+    format: { backgroundColor: { red: 1, green: 0, blue: 0 } },
+  })
+
+  await tab.append([styledCell, "y"])
+
+  expect(mockAppend.mock.calls[0][0].requestBody.values).toEqual([["x", "y"]])
+
+  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  expect(req.repeatCell.range.startRowIndex).toBe(2)
+  expect(req.repeatCell.range.startColumnIndex).toBe(0)
+  expect(req.repeatCell.cell.userEnteredFormat).toEqual({
+    backgroundColor: { red: 1, green: 0, blue: 0 },
+  })
 })
 
 test("Tab append with getRow returns Row", async () => {
@@ -190,4 +325,104 @@ test("Tab delCell throws on invalid address", async () => {
   const tab = new Tab(sheet, "Sheet1", 0, {})
 
   expect(tab.delCell("invalid")).rejects.toThrow(/Invalid cell address/)
+})
+
+test("Tab setSchema stores schema and returns this", () => {
+  const { sheet } = makeMockSheet()
+  const tab = new Tab(sheet, "Sheet1", 0, {})
+  const schema = z.object({ Name: z.string(), Age: z.string() })
+
+  const result = tab.setSchema(schema)
+
+  expect(result).toBe(tab)
+  expect(tab.getSchema()).toBe(schema)
+})
+
+test("Tab append with object validates and converts to row", async () => {
+  const { sheet, mockAppend } = makeMockSheet()
+  mockAppend.mockImplementation(() =>
+    Promise.resolve({ data: { updates: { updatedRange: "Sheet1!A3:C3" } } }),
+  )
+  const tab = new Tab(sheet, "Sheet1", 0, {})
+  tab._setHeaders(["Name", "Email", "Age"])
+
+  await tab.append({ Name: "John", Email: "john@test.com", Age: "30" })
+
+  expect(mockAppend).toHaveBeenCalledTimes(1)
+  expect(mockAppend.mock.calls[0][0].requestBody.values).toEqual([
+    ["John", "john@test.com", "30"],
+  ])
+})
+
+test("Tab append with object validates against schema", async () => {
+  const { sheet, mockAppend } = makeMockSheet()
+  const tab = new Tab(sheet, "Sheet1", 0, {})
+  tab._setHeaders(["Name", "Email", "Age"])
+  tab.setSchema(z.object({ Name: z.string(), Email: z.string(), Age: z.string() }))
+
+  await tab.append({ Name: "John", Email: "john@test.com", Age: "30" })
+
+  expect(mockAppend).toHaveBeenCalledTimes(1)
+})
+
+test("Tab append with object throws ValidationError on invalid schema", async () => {
+  const { sheet } = makeMockSheet()
+  const tab = new Tab(sheet, "Sheet1", 0, {})
+  tab._setHeaders(["Name", "Age"])
+  tab.setSchema(z.object({ Name: z.string(), Age: z.number() }))
+
+  expect(
+    tab.append({ Name: "John", Age: "not-a-number" }),
+  ).rejects.toThrow(ValidationError)
+})
+
+test("Tab append with Cell[] extracts values", async () => {
+  const { sheet, mockAppend } = makeMockSheet()
+  mockAppend.mockImplementation(() =>
+    Promise.resolve({ data: { updates: { updatedRange: "Sheet1!A2:B2" } } }),
+  )
+  const tab = new Tab(sheet, "Sheet1", 0, {})
+
+  const cell1 = new Cell({
+    value: "x",
+    label: "A",
+    rowIndex: 1,
+    cellIndex: 0,
+    tab: {
+      getClient: () => ({}) as any,
+      getSheetId: () => "",
+      getTitle: () => "",
+      getWorksheetId: () => 0,
+      getHeaders: () => [],
+    },
+    row: null,
+  })
+
+  await tab.append([cell1, "y"])
+
+  expect(mockAppend.mock.calls[0][0].requestBody.values).toEqual([["x", "y"]])
+})
+
+test("Tab append array validates against schema by column", async () => {
+  const { sheet } = makeMockSheet()
+  const tab = new Tab(sheet, "Sheet1", 0, {})
+  tab._setHeaders(["Name", "Score"])
+  tab.setSchema(z.object({ name: z.string(), score: z.number() }))
+
+  // "abc" fails z.number() for Score column
+  expect(tab.append(["A", "abc"])).rejects.toThrow(ValidationError)
+})
+
+test("Tab append array passes valid values", async () => {
+  const { sheet, mockAppend } = makeMockSheet()
+  mockAppend.mockImplementation(() =>
+    Promise.resolve({ data: { updates: { updatedRange: "Sheet1!A2:B2" } } }),
+  )
+  const tab = new Tab(sheet, "Sheet1", 0, {})
+  tab._setHeaders(["Name", "Score"])
+  tab.setSchema(z.object({ name: z.string(), score: z.string() }))
+
+  await tab.append(["Alice", "95"])
+
+  expect(mockAppend).toHaveBeenCalledTimes(1)
 })

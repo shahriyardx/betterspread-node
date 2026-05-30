@@ -9,6 +9,7 @@ export { Style } from "./style"
 export type { StyleOptions } from "./style"
 export {
   ValueError,
+  ValidationError,
   SheetNotFoundError,
   TabNotFoundError,
 } from "./types"

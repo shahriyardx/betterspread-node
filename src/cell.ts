@@ -1,5 +1,7 @@
 import type { sheets_v4 } from "@googleapis/sheets"
+import { ZodError } from "zod"
 import type { TabInstance, RowInstance } from "./types"
+import { ValidationError } from "./types"
 import { Style } from "./style"
 
 type CellFormat = sheets_v4.Schema$CellFormat
@@ -11,6 +13,7 @@ export interface CellOptions {
   cellIndex: number
   tab: TabInstance
   row: RowInstance | null
+  format?: CellFormat | Style
 }
 
 export interface CellUpdateOptions {
@@ -36,6 +39,7 @@ export class Cell {
   readonly cellIndex: number
   readonly tab: TabInstance
   readonly row: RowInstance | null
+  readonly format: CellFormat | null
 
   constructor(opts: CellOptions) {
     this.value = opts.value
@@ -44,6 +48,10 @@ export class Cell {
     this.cellIndex = opts.cellIndex
     this.tab = opts.tab
     this.row = opts.row
+    this.format =
+      opts.format instanceof Style
+        ? opts.format.toCellFormat()
+        : (opts.format ?? null)
   }
 
   /** @internal Set parent Row reference. Called by Row constructor. */
@@ -73,8 +81,29 @@ export class Cell {
     return `Cell(row=${this.rowIndex}, header="${this.header}", value="${this.value}")`
   }
 
-  async update(newValue: string, opts: CellUpdateOptions = {}): Promise<Cell> {
+  async update(newValue: string, opts: CellUpdateOptions = {}): Promise<this> {
     const client = this.tab.getClient()
+
+    // Validate against schema if applicable
+    const schema = this.tab.getSchema()
+    if (schema) {
+      const header = this.header
+      if (header && header in schema.shape) {
+        const fieldSchema = schema.shape[header]
+        try {
+          fieldSchema.parse(newValue)
+        } catch (err) {
+          if (err instanceof ZodError) {
+            throw new ValidationError(
+              `Schema validation failed for column "${header}": ${err.message}`,
+              err,
+            )
+          }
+          throw err
+        }
+      }
+    }
+
     const range = `${this.label}${this.rowIndex}`
 
     await client.spreadsheets.values.update({
@@ -93,25 +122,12 @@ export class Cell {
         valueRenderOption: VALUE_RENDER_OPTION_MAP[opts.renderFormat],
       })
 
-      const rawValue = (res.data.values?.[0]?.[0] as string) ?? ""
-      return new Cell({
-        value: rawValue,
-        label: this.label,
-        rowIndex: this.rowIndex,
-        cellIndex: this.cellIndex,
-        tab: this.tab,
-        row: this.row,
-      })
+      ;(this as { value: string }).value = (res.data.values?.[0]?.[0] as string) ?? ""
+    } else {
+      ;(this as { value: string }).value = newValue
     }
 
-    return new Cell({
-      value: newValue,
-      label: this.label,
-      rowIndex: this.rowIndex,
-      cellIndex: this.cellIndex,
-      tab: this.tab,
-      row: this.row,
-    })
+    return this
   }
 
   async clear(): Promise<void> {

@@ -1,6 +1,8 @@
 import { test, expect, mock } from "bun:test"
+import { z } from "zod"
 import { Row } from "../row"
 import { Cell } from "../cell"
+import { ValidationError } from "../types"
 import type { sheets_v4 } from "@googleapis/sheets"
 
 function makeMockTab() {
@@ -28,6 +30,7 @@ function makeMockTab() {
     getTitle: () => "Sheet1",
     getWorksheetId: () => 0,
     getHeaders: () => [],
+    getSchema: () => null,
   }
 
   return { tab, mockClient, mockUpdate, mockClear, mockBatchUpdate, mockGet }
@@ -218,4 +221,100 @@ test("Row numeric index handles negative", () => {
   const row = new Row(cells, tab, 1)
 
   expect(row[-1]).toBeUndefined()
+})
+
+test("Row update with Cell objects applies format", async () => {
+  const { tab, mockBatchUpdate, mockUpdate } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b"], 2)
+  const row = new Row(cells, tab, 2)
+
+  const styledCell = new Cell({
+    value: "x",
+    label: "A",
+    rowIndex: 2,
+    cellIndex: 0,
+    tab,
+    row: null,
+    format: { backgroundColor: { red: 1, green: 0, blue: 0 } },
+  })
+
+  await row.update([styledCell, "y"])
+
+  // Called batchUpdate for the styled cell
+  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  expect(req.repeatCell.range.startRowIndex).toBe(1)
+  expect(req.repeatCell.range.endRowIndex).toBe(2)
+  expect(req.repeatCell.range.startColumnIndex).toBe(0)
+  expect(req.repeatCell.range.endColumnIndex).toBe(1)
+  expect(req.repeatCell.cell.userEnteredFormat).toEqual({
+    backgroundColor: { red: 1, green: 0, blue: 0 },
+  })
+
+  // Extracted value from Cell
+  expect(mockUpdate.mock.calls[0][0].requestBody.values).toEqual([["x", "y"]])
+})
+
+test("Row update with object maps headers to columns", async () => {
+  const { tab, mockUpdate } = makeMockTab()
+  const tabWithHeaders = {
+    ...tab,
+    getHeaders: () => ["Name", "Email", "Age"],
+  }
+  const cells = makeCells(tabWithHeaders, ["old", "", ""], 1)
+  const row = new Row(cells, tabWithHeaders, 1)
+
+  await row.update({ Name: "Alice", Age: "25" })
+
+  // Name is col 0, Age is col 2 — sends contiguous A1:C1 with "" for Email
+  expect(mockUpdate.mock.calls[0][0].requestBody.values).toEqual([
+    ["Alice", "", "25"],
+  ])
+})
+
+test("Row update with object validates against schema", async () => {
+  const { tab, mockUpdate } = makeMockTab()
+  const tabWithSchema = {
+    ...tab,
+    getHeaders: () => ["Name", "Score"],
+    getSchema: () => z.object({ Name: z.string(), Score: z.number() }),
+  }
+  const cells = makeCells(tabWithSchema, ["", ""], 1)
+  const row = new Row(cells, tabWithSchema, 1)
+
+  await expect(
+    row.update({ Name: "Bob", Score: "bad" }),
+  ).rejects.toThrow(ValidationError)
+
+  expect(mockUpdate).not.toHaveBeenCalled()
+})
+
+test("Row update array validates against schema by column", async () => {
+  const { tab, mockUpdate } = makeMockTab()
+  const tabWithSchema = {
+    ...tab,
+    getHeaders: () => ["name", "score"],
+    getSchema: () => z.object({ name: z.string(), score: z.number() }),
+  }
+  const cells = makeCells(tabWithSchema, ["", ""], 1)
+  const row = new Row(cells, tabWithSchema, 1)
+
+  // "abc" fails z.number() for score column (index 1)
+  await expect(row.update(["Bob", "abc"])).rejects.toThrow(ValidationError)
+
+  expect(mockUpdate).not.toHaveBeenCalled()
+})
+
+test("Row update array passes valid values", async () => {
+  const { tab, mockUpdate } = makeMockTab()
+  const tabWithSchema = {
+    ...tab,
+    getHeaders: () => ["name", "score"],
+    getSchema: () => z.object({ name: z.string(), score: z.string() }),
+  }
+  const cells = makeCells(tabWithSchema, ["", ""], 1)
+  const row = new Row(cells, tabWithSchema, 1)
+
+  await row.update(["Alice", "95"])
+
+  expect(mockUpdate).toHaveBeenCalledTimes(1)
 })

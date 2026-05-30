@@ -1,5 +1,7 @@
 import { test, expect, mock } from "bun:test"
+import { z } from "zod"
 import { Cell, type CellUpdateOptions } from "../cell"
+import { ValidationError } from "../types"
 import type { sheets_v4 } from "@googleapis/sheets"
 
 function makeMockTab(overrides: Record<string, unknown> = {}) {
@@ -25,6 +27,7 @@ function makeMockTab(overrides: Record<string, unknown> = {}) {
     getTitle: () => "Sheet1",
     getWorksheetId: () => 0,
     getHeaders: () => [],
+    getSchema: () => null,
     ...overrides,
   }
 
@@ -75,9 +78,7 @@ test("Cell custom inspect shows row, header, and value", () => {
   })
 
   const inspected = cell[Symbol.for("nodejs.util.inspect.custom")]()
-  expect(inspected).toBe(
-    'Cell(row=3, header="", value="hello")',
-  )
+  expect(inspected).toBe('Cell(row=3, header="", value="hello")')
 })
 
 test("Cell header returns empty string when no headers cached", () => {
@@ -127,7 +128,37 @@ test("Cell custom inspect shows header when headers cached", () => {
   )
 })
 
-test("Cell update calls API and returns new cell", async () => {
+test("Cell stores optional format from CellFormat object", () => {
+  const { tab } = makeMockTab()
+  const format = { backgroundColor: { red: 1, green: 0, blue: 0 } }
+  const cell = new Cell({
+    value: "x",
+    label: "A",
+    rowIndex: 1,
+    cellIndex: 0,
+    tab,
+    row: null,
+    format,
+  })
+
+  expect(cell.format).toEqual(format)
+})
+
+test("Cell format is null when not provided", () => {
+  const { tab } = makeMockTab()
+  const cell = new Cell({
+    value: "x",
+    label: "A",
+    rowIndex: 1,
+    cellIndex: 0,
+    tab,
+    row: null,
+  })
+
+  expect(cell.format).toBeNull()
+})
+
+test("Cell update calls API and mutates in place", async () => {
   const { tab, mockUpdate } = makeMockTab()
   const cell = new Cell({
     value: "old",
@@ -145,7 +176,8 @@ test("Cell update calls API and returns new cell", async () => {
     ["new-value"],
   ])
   expect(updated.value).toBe("new-value")
-  expect(updated).not.toBe(cell)
+  expect(updated).toBe(cell) // mutates and returns same instance
+  expect(cell.value).toBe("new-value") // value updated in-place
 })
 
 test("Cell update with formula input_format", async () => {
@@ -249,4 +281,61 @@ test("Cell delete with shift=up sends ROWS", async () => {
 
   const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
   expect(req.deleteRange.shiftDimension).toBe("ROWS")
+})
+
+test("Cell update passes through when no schema set", async () => {
+  const { tab, mockUpdate } = makeMockTab()
+  const cell = new Cell({
+    value: "old",
+    label: "A",
+    rowIndex: 1,
+    cellIndex: 0,
+    tab,
+    row: null,
+  })
+
+  const updated = await cell.update("new-value")
+
+  expect(updated.value).toBe("new-value")
+  expect(mockUpdate).toHaveBeenCalledTimes(1)
+})
+
+test("Cell update validates against schema column type", async () => {
+  const headers = ["Name", "Score"]
+  const { tab } = makeMockTab({
+    getHeaders: () => headers,
+    getSchema: () => z.object({ Name: z.string(), Score: z.number() }),
+  })
+  const cell = new Cell({
+    value: "10",
+    label: "B",
+    rowIndex: 1,
+    cellIndex: 1,
+    tab,
+    row: null,
+  })
+
+  // header is "Score" which maps to z.number() — "abc" fails
+  await expect(cell.update("abc")).rejects.toThrow(ValidationError)
+})
+
+test("Cell update passes validation when schema matches", async () => {
+  const headers = ["Name", "Score"]
+  const { tab, mockUpdate } = makeMockTab({
+    getHeaders: () => headers,
+    getSchema: () => z.object({ Name: z.string(), Score: z.string() }),
+  })
+  const cell = new Cell({
+    value: "10",
+    label: "B",
+    rowIndex: 1,
+    cellIndex: 1,
+    tab,
+    row: null,
+  })
+
+  const updated = await cell.update("99")
+
+  expect(updated.value).toBe("99")
+  expect(mockUpdate).toHaveBeenCalledTimes(1)
 })

@@ -11,6 +11,7 @@
   "type": "module",
   "dependencies": {
     "@googleapis/drive": "^20.2.0",
-    "@googleapis/sheets": "^13.0.2"
+    "@googleapis/sheets": "^13.0.2",
+    "zod": "^4.4.3"
   }
 }
