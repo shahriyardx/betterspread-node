@@ -112,17 +112,6 @@ const BORDER_STYLE_MAP: Record<string, string> = {
   mediumDotted: "MEDIUM_DOTTED",
   mediumSolid: "MEDIUM_SOLID",
   thick: "THICK",
-  // Reverse mappings for round-trip from API
-  SOLID: "SOLID",
-  DASHED: "DASHED",
-  DOTTED: "DOTTED",
-  DOUBLE: "DOUBLE",
-  NONE: "NONE",
-  MEDIUM: "MEDIUM",
-  MEDIUM_DASHED: "MEDIUM_DASHED",
-  MEDIUM_DOTTED: "MEDIUM_DOTTED",
-  MEDIUM_SOLID: "MEDIUM_SOLID",
-  THICK: "THICK",
 }
 
 // Reverse map: API uppercase → BorderOptions lowercase
@@ -198,30 +187,8 @@ export class Format {
   raw?: CellFormat
 
   constructor(opts: FormatOptions = {}) {
-    this.bgColor = opts.bgColor
-    this.textColor = opts.textColor
-    this.bold = opts.bold
-    this.italic = opts.italic
-    this.strikethrough = opts.strikethrough
-    this.underline = opts.underline
-    this.fontFamily = opts.fontFamily
-    this.fontSize = opts.fontSize
-    this.link = opts.link
-    this.horizontalAlign = opts.horizontalAlign
-    this.verticalAlign = opts.verticalAlign
-    this.backgroundColor = opts.backgroundColor
-    this.backgroundColorStyle = opts.backgroundColorStyle
-    this.borders = opts.borders
-    this.horizontalAlignment = opts.horizontalAlignment
-    this.verticalAlignment = opts.verticalAlignment
-    this.hyperlinkDisplayType = opts.hyperlinkDisplayType
-    this.numberFormat = opts.numberFormat
-    this.padding = opts.padding
-    this.textDirection = opts.textDirection
-    this.textFormat = opts.textFormat
-    this.textRotation = opts.textRotation
-    this.wrapStrategy = opts.wrapStrategy
-    this.raw = opts.raw
+    // Every FormatOptions key is a Format field of the same name and type.
+    Object.assign(this, opts)
   }
 
   static fromCellFormat(format: CellFormat): Format {
@@ -261,36 +228,12 @@ export class Format {
   }
 
   /**
-   * Create new Format with overrides. Original unchanged.
-   * Merges current properties with opts, opts win on conflict.
+   * Create new Format with overrides. Original (top-level) unchanged; opts win
+   * on conflict. Nested objects (borders, textFormat, …) are shared by reference
+   * unless overridden in opts.
    */
   extend(opts: FormatOptions): Format {
-    return new Format({
-      bgColor: this.bgColor,
-      textColor: this.textColor,
-      bold: this.bold,
-      italic: this.italic,
-      strikethrough: this.strikethrough,
-      underline: this.underline,
-      fontFamily: this.fontFamily,
-      fontSize: this.fontSize,
-      link: this.link,
-      horizontalAlign: this.horizontalAlign,
-      verticalAlign: this.verticalAlign,
-      backgroundColor: this.backgroundColor,
-      backgroundColorStyle: this.backgroundColorStyle,
-      borders: this.borders ? { ...this.borders } : undefined,
-      horizontalAlignment: this.horizontalAlignment,
-      verticalAlignment: this.verticalAlignment,
-      hyperlinkDisplayType: this.hyperlinkDisplayType,
-      numberFormat: this.numberFormat ? { ...this.numberFormat } : undefined,
-      padding: this.padding ? { ...this.padding } : undefined,
-      textDirection: this.textDirection,
-      textFormat: this.textFormat ? { ...this.textFormat } : undefined,
-      textRotation: this.textRotation ? { ...this.textRotation } : undefined,
-      wrapStrategy: this.wrapStrategy,
-      ...opts,
-    })
+    return new Format({ ...this, ...opts })
   }
 
   toCellFormat(): CellFormat {
