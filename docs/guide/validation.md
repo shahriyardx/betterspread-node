@@ -17,6 +17,24 @@ const UserSchema = z.object({
 tab.setSchema(UserSchema)
 ```
 
+Schema keys must exist in the tab's cached headers (case-sensitive). `setSchema`
+throws if a key has no matching header. The schema does **not** reorder columns —
+values map to columns by header name, preserving real sheet column order.
+
+## Type Coercion
+
+Cells store strings, so array and cell paths coerce before validating: a numeric
+string passes a `z.number()` column, `"true"`/`"false"` pass `z.boolean()`, and a
+date string passes `z.date()`. Non-coercible values still throw.
+
+```ts
+// "30" coerces to 30 → passes Age: z.number()
+await tab.append({ values: ["Alice", "alice@test.com", "30"] })
+
+// "abc" cannot coerce → throws ValidationError
+await tab.append({ values: ["Alice", "alice@test.com", "abc"] })
+```
+
 ## Validation on Append
 
 ```ts

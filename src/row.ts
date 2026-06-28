@@ -21,6 +21,10 @@ export class Row extends Array<Cell> implements RowInstance {
   private _tab: TabInstance
   private _rowIndex: number
 
+  static override get [Symbol.species](): ArrayConstructor {
+    return Array
+  }
+
   constructor(cells: Cell[], tab: TabInstance, rowIndex: number) {
     super(...cells)
     this._tab = tab

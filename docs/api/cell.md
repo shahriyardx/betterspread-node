@@ -74,10 +74,10 @@ Applies a Format to this cell.
 ### delete()
 
 ```ts
-delete(shift: "left" | "up" = "left"): Promise<void>
+delete(shift: "left" | "up" = "up"): Promise<void>
 ```
 
-Deletes the cell, shifting remaining cells left or up.
+Deletes the cell, shifting remaining cells up or left. Default `"up"`, matching `Tab.delCell`.
 
 ### toString()
 

@@ -94,6 +94,43 @@ test("hexToColor handles case insensitive", () => {
   })
 })
 
-test("hexToColor returns null for invalid hex", () => {
-  expect(hexToColor("xyz")).toBeNull()
+test("hexToColor throws on invalid hex string", () => {
+  expect(() => hexToColor("xyz")).toThrow(/Invalid hex color/)
+})
+
+test("hexToColor expands 3-digit shorthand #F0F", () => {
+  expect(hexToColor("#F0F")).toEqual(hexToColor("#FF00FF"))
+})
+
+test("hexToColor expands 3-digit shorthand without #", () => {
+  expect(hexToColor("F0F")).toEqual({ red: 1, green: 0, blue: 1 })
+})
+
+test("hexToColor expands mixed case #a1b", () => {
+  expect(hexToColor("#a1b")).toEqual({
+    red: parseInt("aa", 16) / 255,
+    green: parseInt("11", 16) / 255,
+    blue: parseInt("bb", 16) / 255,
+  })
+})
+
+test("hexToColor throws on wrong length", () => {
+  expect(() => hexToColor("FF00")).toThrow(/Invalid hex color/)
+})
+
+test("hexToColor throws on non-hex chars", () => {
+  expect(() => hexToColor("#GGGGGG")).toThrow(/Invalid hex color/)
+})
+
+test("columnIndex normalizes lowercase input", () => {
+  expect(columnIndex("a")).toBe(0)
+  expect(columnIndex("A")).toBe(0)
+  expect(columnIndex("z")).toBe(25)
+  expect(columnIndex("aa")).toBe(26)
+})
+
+test("columnIndex returns -1 for invalid input", () => {
+  expect(columnIndex("123")).toBe(-1)
+  expect(columnIndex("A1")).toBe(-1)
+  expect(columnIndex("")).toBe(-1)
 })

@@ -1,6 +1,6 @@
 {
 	"name": "betterspread",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"description": "TypeScript Google Sheets wrapper with typed rows, cell formatting, and Zod schema validation",
 	"main": "./dist/index.js",
 	"module": "./dist/index.js",

@@ -72,7 +72,7 @@ export class Sheet {
     }
 
     const queryParts: string[] = [
-      `name = '${this.sheetName.replace(/'/g, "\\'")}'`,
+      `name = '${this.sheetName.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`,
       "mimeType = 'application/vnd.google-apps.spreadsheet'",
     ]
 

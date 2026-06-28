@@ -302,8 +302,11 @@ export class Format {
     if (this.backgroundColor) {
       format.backgroundColor = this.backgroundColor
     } else if (this.bgColor) {
-      const c = hexToColor(this.bgColor)
-      if (c) format.backgroundColor = c
+      try {
+        format.backgroundColor = hexToColor(this.bgColor)
+      } catch {
+        // Ignore invalid hex shorthand — leave backgroundColor unset
+      }
     }
     if (this.backgroundColorStyle) {
       format.backgroundColorStyle = this.backgroundColorStyle
@@ -369,8 +372,11 @@ export class Format {
 
     // textColor shorthand → foregroundColor (only if foregroundColor not already set)
     if (this.textColor && !tf.foregroundColor && !tf.foregroundColorStyle) {
-      const c = hexToColor(this.textColor)
-      if (c) tf.foregroundColor = c
+      try {
+        tf.foregroundColor = hexToColor(this.textColor)
+      } catch {
+        // Ignore invalid hex shorthand — leave foregroundColor unset
+      }
     }
 
     if (Object.keys(tf).length > 0) format.textFormat = tf

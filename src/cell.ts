@@ -1,8 +1,7 @@
 import type { sheets_v4 } from "@googleapis/sheets"
-import { ZodError } from "zod"
 import type { TabInstance, RowInstance, ValueInputOption } from "./types"
-import { ValidationError } from "./types"
 import { Format } from "./format"
+import { validateFieldWithCoercion } from "./utils"
 
 type CellFormat = sheets_v4.Schema$CellFormat
 
@@ -97,23 +96,13 @@ export class Cell {
       fields.push("userEnteredFormat")
     }
 
-    // Validate against schema if applicable
+    // Validate against schema if applicable, attempting string coercion
     const schema = tab.getSchema()
     if (schema) {
       const header = this.header
       if (header && header in schema.shape) {
         const fieldSchema = schema.shape[header]
-        try {
-          fieldSchema.parse(strValue)
-        } catch (err) {
-          if (err instanceof ZodError) {
-            throw new ValidationError(
-              `Schema validation failed for column "${header}": ${err.message}`,
-              err,
-            )
-          }
-          throw err
-        }
+        validateFieldWithCoercion(fieldSchema, strValue, header)
       }
     }
 
@@ -185,7 +174,7 @@ export class Cell {
     })
   }
 
-  async delete(shift: "left" | "up" = "left"): Promise<void> {
+  async delete(shift: "left" | "up" = "up"): Promise<void> {
     const tab = this.requireTab()
     const client = tab.getClient()
     const isLeft = shift === "left"

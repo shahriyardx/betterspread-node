@@ -261,3 +261,43 @@ test("Sheet custom inspect after open shows name and id", async () => {
   const inspected = sheet[Symbol.for("nodejs.util.inspect.custom")]()
   expect(inspected).toBe('Sheet(name="abc123", id="abc123")')
 })
+
+test("Sheet open escapes backslash in sheet name", async () => {
+  const { connection, mockDriveFilesList } = makeMockConnection({
+    directFails: true,
+  })
+  // Actual name contains a single backslash: a\b
+  const sheet = new Sheet("a\\b", connection as any)
+
+  await sheet.open()
+
+  const q = mockDriveFilesList.mock.calls[0]![0]!.q
+  // Backslash must be escaped to two backslashes: name = 'a\\b'
+  expect(q).toContain("name = 'a\\\\b'")
+})
+
+test("Sheet open escapes backslash before quote (no malformed sequence)", async () => {
+  const { connection, mockDriveFilesList } = makeMockConnection({
+    directFails: true,
+  })
+  // Actual name contains backslash followed by quote: a\'b
+  const sheet = new Sheet("a\\'b", connection as any)
+
+  await sheet.open()
+
+  const q = mockDriveFilesList.mock.calls[0]![0]!.q
+  // Backslash escaped first (\\), then quote (\'): name = 'a\\\'b'
+  expect(q).toContain("name = 'a\\\\\\'b'")
+})
+
+test("Sheet open preserves mimeType part when escaping name", async () => {
+  const { connection, mockDriveFilesList } = makeMockConnection({
+    directFails: true,
+  })
+  const sheet = new Sheet("a\\b", connection as any)
+
+  await sheet.open()
+
+  const q = mockDriveFilesList.mock.calls[0]![0]!.q
+  expect(q).toContain("mimeType = 'application/vnd.google-apps.spreadsheet'")
+})

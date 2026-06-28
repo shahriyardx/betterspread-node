@@ -312,3 +312,110 @@ test("Row update array passes valid values", async () => {
 
   expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
 })
+
+test("Row.map() returns plain Array and calls callback for each cell", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b", "c"], 1)
+  const row = new Row(cells, tab, 1)
+
+  const result = row.map((cell) => cell.value.toUpperCase())
+
+  expect(result).not.toBeInstanceOf(Row)
+  expect(result).toBeInstanceOf(Array)
+  expect(result).toEqual(["A", "B", "C"])
+})
+
+test("Row.filter() returns plain Array with filtered cells", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["a", "", "c"], 1)
+  const row = new Row(cells, tab, 1)
+
+  const result = row.filter((cell) => cell.value !== "")
+
+  expect(result).not.toBeInstanceOf(Row)
+  expect(result).toBeInstanceOf(Array)
+  expect(result).toHaveLength(2)
+  expect(result[0]?.value).toBe("a")
+})
+
+test("Row.slice() returns plain Array of sliced cells", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b", "c"], 1)
+  const row = new Row(cells, tab, 1)
+
+  const result = row.slice(1, 3)
+
+  expect(result).not.toBeInstanceOf(Row)
+  expect(result).toBeInstanceOf(Array)
+  expect(result).toHaveLength(2)
+})
+
+test("Row.splice() returns plain Array of deleted elements", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b", "c"], 1)
+  const row = new Row(cells, tab, 1)
+
+  const result = row.splice(1, 1)
+
+  expect(result).not.toBeInstanceOf(Row)
+  expect(result).toBeInstanceOf(Array)
+  expect(result).toHaveLength(1)
+  expect(result[0]?.value).toBe("b")
+  expect(row).toHaveLength(2)
+})
+
+test("Row.concat() returns plain Array with concatenated cells", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b"], 1)
+  const row = new Row(cells, tab, 1)
+  const newCells = makeCells(tab, ["c"], 1)
+
+  const result = row.concat(newCells)
+
+  expect(result).not.toBeInstanceOf(Row)
+  expect(result).toBeInstanceOf(Array)
+  expect(result).toHaveLength(3)
+})
+
+test("Row in-place mutations still work (push/sort)", async () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["c", "a"], 1)
+  const row = new Row(cells, tab, 1)
+
+  row.sort((a, b) => a.value.localeCompare(b.value))
+  expect(row[0]?.value).toBe("a")
+  expect(row[1]?.value).toBe("c")
+
+  await row.appendCell("b")
+  expect(row).toHaveLength(3)
+  expect(row[2]?.value).toBe("b")
+})
+
+test("Row Proxy virtual cells still work with array methods", () => {
+  const { tab } = makeMockTab()
+  const cells = makeCells(tab, ["a", "b"], 1)
+  const row = new Row(cells, tab, 1)
+
+  const cell = row[5]
+  expect(cell?.value).toBe("")
+  expect(cell?.cellIndex).toBe(5)
+
+  const result = row.map((c) => c.value)
+  expect(result).toEqual(["a", "b"])
+})
+
+test("Row update array coerces typed values against schema", async () => {
+  const { tab, mockBatchUpdate } = makeMockTab()
+  const tabWithSchema = {
+    ...tab,
+    getHeaders: () => ["age", "flag"],
+    getSchema: () => z.object({ age: z.number(), flag: z.boolean() }),
+  }
+  const cells = makeCells(tabWithSchema, ["", ""], 1)
+  const row = new Row(cells, tabWithSchema, 1)
+
+  // 30 is already a number; "true" coerces to boolean
+  await row.update({ values: [30, "true"] })
+
+  expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+})

@@ -12,7 +12,8 @@ import {
   columnLabel,
   columnIndex,
   parseCellAddress,
-  buildCellData,
+  extractCellValue,
+  extractCellFormat,
   validateArrayAgainstSchema,
 } from "./utils"
 
@@ -73,14 +74,39 @@ export class Tab {
   }
 
   _setHeaders(headers: string[]): void {
-    this._headers = this._schema ? Object.keys(this._schema.shape) : headers
+    // Always preserve real sheet header order
+    this._headers = headers
+
+    // If schema is set, validate all schema keys exist in actual headers
+    if (this._schema) {
+      const schemaKeys = Object.keys(this._schema.shape)
+      const missingKeys = schemaKeys.filter((key) => !headers.includes(key))
+      if (missingKeys.length > 0) {
+        throw new Error(
+          `Schema keys not found in sheet headers: ${missingKeys.join(", ")}. ` +
+            `Sheet headers: ${headers.join(", ")}`,
+        )
+      }
+    }
   }
 
   setSchema(schema: z.ZodObject): this {
     this._schema = schema
+
+    // If headers already cached, validate schema keys match
     if (this._headers.length > 0) {
-      this._headers = Object.keys(schema.shape)
+      const schemaKeys = Object.keys(schema.shape)
+      const missingKeys = schemaKeys.filter(
+        (key) => !this._headers.includes(key),
+      )
+      if (missingKeys.length > 0) {
+        throw new Error(
+          `Schema keys not found in sheet headers: ${missingKeys.join(", ")}. ` +
+            `Sheet headers: ${this._headers.join(", ")}`,
+        )
+      }
     }
+
     return this
   }
 
@@ -255,52 +281,84 @@ export class Tab {
       validateArrayAgainstSchema(rowArray, this._headers, this._schema)
     }
 
-    // Build CellData for each column — value + optional format in one shot
-    const cellData = rowArray.map((v) => buildCellData(v, inputFormat))
-
-    await client.spreadsheets.batchUpdate({
+    // Write values via values.append — the API echoes the exact landing range
+    // (updates.updatedRange), so the appended row index is known without a
+    // full-sheet read and without racing concurrent appends. appendCells gave
+    // no such echo, and gridProperties.rowCount is the grid size (often 1000),
+    // not the last data row, so it could not be used to locate the new row.
+    const appendRes = await client.spreadsheets.values.append({
       spreadsheetId: this.getSheetId(),
+      range: `${this.title}!A1`,
+      valueInputOption: inputFormat ?? "RAW",
+      insertDataOption: "INSERT_ROWS",
       requestBody: {
-        requests: [
-          {
-            appendCells: {
-              sheetId: this.worksheetId,
-              rows: [{ values: cellData as Record<string, unknown>[] }],
-              fields: "userEnteredValue,userEnteredFormat",
-            },
-          },
-        ],
+        values: [rowArray.map((v) => extractCellValue(v))],
       },
     })
 
-    if (!getRow) return null
+    const updatedRange = appendRes.data.updates?.updatedRange
+    const appendedRowIndex = updatedRange
+      ? parseAppendedRowIndex(updatedRange)
+      : null
 
-    // Refetch to find the last row
-    const res = await client.spreadsheets.values.get({
+    // values.append cannot carry per-cell format. Apply formats in a second
+    // pass, only when at least one input cell actually has a format.
+    const cellFormats = rowArray.map((v) => extractCellFormat(v))
+    const hasFormat = cellFormats.some((f) => f !== undefined)
+    if (hasFormat && appendedRowIndex != null) {
+      await client.spreadsheets.batchUpdate({
+        spreadsheetId: this.getSheetId(),
+        requestBody: {
+          requests: [
+            {
+              updateCells: {
+                range: {
+                  sheetId: this.worksheetId,
+                  startRowIndex: appendedRowIndex - 1,
+                  endRowIndex: appendedRowIndex,
+                  startColumnIndex: 0,
+                  endColumnIndex: cellFormats.length,
+                },
+                rows: [
+                  {
+                    values: cellFormats.map((f) =>
+                      f ? { userEnteredFormat: f } : {},
+                    ),
+                  },
+                ],
+                fields: "userEnteredFormat",
+              },
+            },
+          ],
+        },
+      })
+    }
+
+    if (!getRow || appendedRowIndex == null) return null
+
+    // Read the landed row (effectiveValue + applied format) at the echoed index.
+    const res = await client.spreadsheets.get({
       spreadsheetId: this.getSheetId(),
-      range: `${this.title}!A:ZZZ`,
+      ranges: [`${this.title}!A${appendedRowIndex}:ZZZ${appendedRowIndex}`],
+      fields: "sheets.data.rowData.values(effectiveValue,userEnteredFormat)",
     })
 
-    const rows = (res.data.values as unknown[][]) ?? []
-    const lastRowValues = rows[rows.length - 1] ?? []
+    const rowData = res.data.sheets?.[0]?.data?.[0]?.rowData?.[0]
+    const values = rowData?.values ?? []
 
-    const cells = lastRowValues.map((val, j) => {
-      const inputCell = rowArray[j]
+    const cells = values.map((val, j) => {
       return new Cell({
-        value: String(val ?? ""),
+        value: String(extractEffectiveValue(val.effectiveValue) ?? ""),
         label: columnLabel(j),
-        rowIndex: rows.length,
+        rowIndex: appendedRowIndex,
         cellIndex: j,
         tab: this,
         row: null,
-        format:
-          inputCell instanceof Cell
-            ? (inputCell.format ?? undefined)
-            : undefined,
+        format: val.userEnteredFormat ?? undefined,
       })
     })
 
-    return new Row(cells, this, rows.length)
+    return new Row(cells, this, appendedRowIndex)
   }
 
   async delRow(opts: DelRowOpts): Promise<void> {
@@ -347,10 +405,9 @@ export class Tab {
 
     if (end) {
       const endParsed = parseCellAddress(end)
-      if (endParsed) {
-        endColIndex = columnIndex(endParsed.label)
-        endRowIndex = endParsed.row
-      }
+      if (!endParsed) throw new Error(`Invalid cell address: ${end}`)
+      endColIndex = columnIndex(endParsed.label)
+      endRowIndex = endParsed.row
     }
 
     await client.spreadsheets.batchUpdate({
@@ -373,6 +430,17 @@ export class Tab {
       },
     })
   }
+}
+
+/**
+ * Extract the 1-based row index from a values.append updatedRange.
+ * "Sheet1!A3:B3" → 3, "'My Sheet'!A3" → 3. Returns null if unparseable.
+ */
+function parseAppendedRowIndex(updatedRange: string): number | null {
+  const afterSheet = updatedRange.split("!").pop() ?? ""
+  const startCell = afterSheet.split(":")[0] ?? ""
+  const m = startCell.match(/\d+/)
+  return m ? parseInt(m[0], 10) : null
 }
 
 function extractEffectiveValue(

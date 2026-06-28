@@ -375,3 +375,97 @@ test("Cell update with Cell object without format uses value only", async () => 
     { userEnteredValue: { stringValue: "just-value" } },
   ])
 })
+
+test("Cell delete defaults to shift=up (ROWS), matching Tab.delCell", async () => {
+  const { tab, mockBatchUpdate } = makeMockTab()
+  const cell = new Cell({
+    value: "x",
+    label: "A",
+    rowIndex: 1,
+    cellIndex: 0,
+    tab,
+    row: null,
+  })
+
+  await cell.delete()
+
+  const req = mockBatchUpdate.mock.calls[0][0].requestBody.requests[0]
+  expect(req.deleteRange.shiftDimension).toBe("ROWS")
+})
+
+test("Cell update coerces numeric string for number schema", async () => {
+  const { tab, mockBatchUpdate } = makeMockTab({
+    getHeaders: () => ["Name", "Score"],
+    getSchema: () => z.object({ Name: z.string(), Score: z.number() }),
+  })
+  const cell = new Cell({
+    value: "10",
+    label: "B",
+    rowIndex: 1,
+    cellIndex: 1,
+    tab,
+    row: null,
+  })
+
+  const updated = await cell.update({ value: "42" })
+
+  expect(updated.value).toBe("42")
+  expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+})
+
+test("Cell update rejects non-coercible string for number schema", async () => {
+  const { tab } = makeMockTab({
+    getHeaders: () => ["Name", "Score"],
+    getSchema: () => z.object({ Name: z.string(), Score: z.number() }),
+  })
+  const cell = new Cell({
+    value: "10",
+    label: "B",
+    rowIndex: 1,
+    cellIndex: 1,
+    tab,
+    row: null,
+  })
+
+  await expect(cell.update({ value: "abc" })).rejects.toThrow(ValidationError)
+})
+
+test("Cell update coerces boolean string for boolean schema", async () => {
+  const { tab, mockBatchUpdate } = makeMockTab({
+    getHeaders: () => ["Active"],
+    getSchema: () => z.object({ Active: z.boolean() }),
+  })
+  const cell = new Cell({
+    value: "false",
+    label: "A",
+    rowIndex: 1,
+    cellIndex: 0,
+    tab,
+    row: null,
+  })
+
+  const updated = await cell.update({ value: "true" })
+
+  expect(updated.value).toBe("true")
+  expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+})
+
+test("Cell update coerces date string for date schema", async () => {
+  const { tab, mockBatchUpdate } = makeMockTab({
+    getHeaders: () => ["When"],
+    getSchema: () => z.object({ When: z.date() }),
+  })
+  const cell = new Cell({
+    value: "",
+    label: "A",
+    rowIndex: 1,
+    cellIndex: 0,
+    tab,
+    row: null,
+  })
+
+  const updated = await cell.update({ value: "2026-06-28" })
+
+  expect(updated.value).toBe("2026-06-28")
+  expect(mockBatchUpdate).toHaveBeenCalledTimes(1)
+})

@@ -106,7 +106,9 @@ Deletes a cell or range with shift.
 setSchema(schema: z.ZodObject): this
 ```
 
-Attaches a Zod schema for validation. Returns `this` for chaining.
+Attaches a Zod schema for validation. Returns `this` for chaining. Throws if any
+schema key is missing from the tab's cached headers (case-sensitive). Columns map
+by header name, not schema key order.
 
 ### getSchema()
 
